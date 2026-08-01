@@ -109,6 +109,57 @@
       20%, 60% { transform: translateX(-4px); }
       40%, 80% { transform: translateX(4px); }
     }
+
+    /* TTS pulse animation */
+    .tts-pulse {
+      animation: tts-pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes tts-pulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(105,164,148,.4); }
+      50% { transform: scale(1.08); box-shadow: 0 0 0 8px rgba(105,164,148,0); }
+    }
+
+    /* Fullscreen Korean overlay */
+    .korean-fullscreen {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: linear-gradient(160deg, #1a2e28 0%, #0f1f1a 50%, #1a2535 100%);
+      padding: 24px; text-align: center;
+      animation: fs-fade-in 0.25s ease;
+    }
+    @keyframes fs-fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .korean-fullscreen .fs-korean {
+      font-size: clamp(32px, 10vw, 56px);
+      font-weight: 800; color: #fff; line-height: 1.4;
+      letter-spacing: -0.02em;
+    }
+    .korean-fullscreen .fs-chinese {
+      font-size: clamp(16px, 5vw, 24px);
+      color: rgba(255,255,255,.6); margin-top: 16px; font-weight: 600;
+    }
+    .korean-fullscreen .fs-pronounce {
+      font-size: clamp(14px, 4vw, 18px);
+      color: #69a494; margin-top: 12px; font-weight: 600;
+    }
+    .korean-fullscreen .fs-wave {
+      margin-top: 32px; display: flex; align-items: center; gap: 4px;
+    }
+    .korean-fullscreen .fs-wave span {
+      width: 3px; border-radius: 3px; background: #69a494;
+      animation: wave-bar 1s ease-in-out infinite;
+    }
+    .korean-fullscreen .fs-wave span:nth-child(1) { height: 12px; animation-delay: 0s; }
+    .korean-fullscreen .fs-wave span:nth-child(2) { height: 20px; animation-delay: 0.1s; }
+    .korean-fullscreen .fs-wave span:nth-child(3) { height: 28px; animation-delay: 0.2s; }
+    .korean-fullscreen .fs-wave span:nth-child(4) { height: 20px; animation-delay: 0.3s; }
+    .korean-fullscreen .fs-wave span:nth-child(5) { height: 12px; animation-delay: 0.4s; }
+    @keyframes wave-bar {
+      0%, 100% { transform: scaleY(0.5); opacity: 0.5; }
+      50% { transform: scaleY(1); opacity: 1; }
+    }
   </style>
 </head>
 
@@ -138,74 +189,70 @@
           </button>
         </div>
 
-        <!-- DAY 標題 + 天氣 (MAEMORY 風格) -->
+        <!-- 今日行動卡 -->
         <div class="rounded-[24px] bg-gradient-to-br from-[#dff3ec] via-[#edf8f4] to-[#e8f2fb] text-ink p-5 shadow-float border border-white overflow-hidden relative">
-          <div class="absolute -right-8 -top-10 w-32 h-32 rounded-full bg-white opacity-55"></div>
-          <div class="absolute right-12 bottom-[-42px] w-24 h-24 rounded-full bg-sun opacity-25"></div>
+          <!-- 柔和裝飾底圖 -->
+          <div class="absolute -right-6 -top-6 w-28 h-28 rounded-full bg-white/30 blur"></div>
+          <div class="absolute right-10 -bottom-8 w-20 h-20 rounded-full bg-sun/20 blur"></div>
           
           <div class="relative">
-            <!-- DAY X · 日期 -->
+            <!-- 上排：DAY + 天氣 -->
             <div class="flex items-center justify-between">
               <p class="text-[11px] font-bold tracking-wider text-sageDeep uppercase">
                 DAY {{ selectedDay + 1 }} · {{ shortDate(selectedDate) }} {{ tripDays[selectedDay]?.weekday || '' }}
               </p>
-              <!-- 天氣 (即時 API) -->
-              <div v-if="selectedDateWeather" class="text-right">
-                <div class="flex items-center gap-1 justify-end">
-                  <span class="text-2xl leading-none">{{ selectedDateWeather.emoji }}</span>
-                  <span class="text-xl font-bold">{{ selectedDateWeather.maxTemp }}°</span>
-                </div>
-                <p class="text-[10px] text-ink/50 font-semibold mt-0.5">{{ selectedDateWeather.text }} · {{ trip.city || 'Seoul' }}</p>
+              <div v-if="selectedDateWeather" class="flex items-center gap-1">
+                <span class="text-base leading-none">{{ selectedDateWeather.emoji }}</span>
+                <span class="text-sm font-bold">{{ selectedDateWeather.maxTemp }}°</span>
+                <span class="text-[10px] text-ink/50 font-semibold">{{ selectedDateWeather.text }}</span>
               </div>
-              <div v-else-if="weather.loading" class="text-right">
+              <div v-else-if="weather.loading">
                 <p class="text-[10px] text-ink/40 font-semibold">天氣載入中…</p>
               </div>
-              <div v-else class="text-right">
+              <div v-else>
                 <p class="text-[10px] text-ink/40 font-semibold">預報尚未開放</p>
               </div>
             </div>
 
-            <!-- 行程統計 -->
-            <div class="mt-3 flex items-end justify-between">
-              <div>
-                <p class="text-lg font-bold leading-tight">{{ trip.title }}</p>
-                <p class="mt-1 text-xs text-ink/45">{{ tripDays.length }} 天 · {{ totalPlans }} 個行程</p>
+            <!-- 穿搭小叮嚀 -->
+            <p v-if="weatherTip" class="mt-1.5 text-[10px] text-ink/40 font-medium flex items-center gap-1">
+              <span>👕</span> {{ weatherTip }}
+            </p>
+            <div v-if="nextStop" class="mt-3">
+              <div class="flex items-center gap-2">
+                <p class="text-[10px] font-bold text-sageDeep tracking-wide">{{ nextStop.time }} 出發</p>
+                <span v-if="remainingStops > 1" class="text-[9px] font-semibold text-ink/40">· 還有 {{ remainingStops }} 個行程</span>
               </div>
-              <div class="text-right">
-                <p class="text-[10px] tracking-wider text-ink/45 font-bold">預算使用</p>
-                <p class="mt-0.5 font-bold text-base">{{ money(totalSpentTwd) }}</p>
-                <div class="mt-1.5 w-20 h-1.5 rounded-full bg-white/75 overflow-hidden ml-auto">
-                  <div class="h-full rounded-full bg-sageDeep transition-all" :style="{ width: budgetPercent + '%' }"></div>
-                </div>
-              </div>
-            </div>
-
-            <!-- NEXT STOP 卡片 -->
-            <div v-if="nextStop" class="mt-4 pt-4 border-t border-white/60">
-              <div class="flex items-center justify-between mb-2">
-                <span class="text-[9px] font-black tracking-[.15em] text-sageDeep bg-white/70 px-2 py-0.5 rounded-full uppercase">NEXT STOP</span>
-                <span class="text-[11px] font-bold text-ink/60">{{ nextStop.time }} 建議出發</span>
-              </div>
-              <div class="flex items-center justify-between">
-                <div class="min-w-0 flex-1">
-                  <h3 class="text-base font-bold text-ink truncate">{{ nextStop.title }}</h3>
-                  <p class="text-[11px] text-ink/50 mt-0.5 flex items-center gap-1">
-                    <i data-lucide="map-pin" class="w-3 h-3 text-sageDeep shrink-0"></i>
-                    {{ nextStop.location || '首爾市區' }}
-                  </p>
-                </div>
-                <div class="flex gap-2 shrink-0 ml-3">
-                  <button @click="openNavigation(nextStop)" class="h-9 px-3 rounded-xl bg-white text-sageDeep text-[11px] font-bold shadow-sm flex items-center gap-1">
+              <h2 class="mt-1 text-xl font-bold leading-tight text-ink">{{ nextStop.title }}</h2>
+              <div class="mt-1.5 flex items-center justify-between">
+                <p class="text-[11px] text-ink/50 flex items-center gap-1">
+                  <i data-lucide="map-pin" class="w-3 h-3 text-sageDeep shrink-0"></i>
+                  {{ nextStop.location || '首爾市區' }}
+                </p>
+                <div class="flex gap-2">
+                  <button @click="openNavigation(nextStop)" class="h-8 px-3 rounded-xl bg-white/80 text-sageDeep text-[11px] font-bold shadow-sm flex items-center gap-1">
                     <i data-lucide="navigation" class="w-3.5 h-3.5"></i>導航
                   </button>
-                  <button v-if="todayHotel" @click="openNavigation({ title: todayHotel.krName, location: todayHotel.address, locationKr: todayHotel.krName, transport: 'taxi' })" class="h-9 px-3 rounded-xl bg-sageDeep text-white text-[11px] font-bold shadow-sm flex items-center gap-1">
+                  <button v-if="todayHotel" @click="openNavigation({ title: todayHotel.krName, location: todayHotel.address, locationKr: todayHotel.krName, transport: 'taxi' })" class="h-8 px-3 rounded-xl bg-sageDeep text-white text-[11px] font-bold shadow-sm flex items-center gap-1">
                     <i data-lucide="home" class="w-3.5 h-3.5"></i>回住宿
                   </button>
                 </div>
               </div>
             </div>
-            <div v-else class="mt-4 pt-4 border-t border-white/60 text-center">
-              <p class="text-xs text-ink/40 font-semibold">✨ 所有行程都完成了，好好休息吧</p>
+            <div v-else class="mt-3 py-2 text-center">
+              <p class="text-base font-bold text-ink">✨ 今日行程已完成</p>
+              <p class="mt-1 text-xs text-ink/45">好好享受首爾吧</p>
+            </div>
+
+            <!-- 底部：預算進度 -->
+            <div class="mt-3 pt-3 border-t border-white/50 flex items-center justify-between gap-3">
+              <div class="flex items-center gap-2 flex-1">
+                <div class="w-24 h-2.5 rounded-full overflow-hidden bg-mint">
+                  <div class="h-full rounded-full transition-all" :class="remainingPercent > 20 ? 'bg-sageDeep' : 'bg-[#d4836b]'" :style="{ width: Math.max(6, 100 - remainingPercent) + '%' }"></div>
+                </div>
+                <span class="text-[10px] text-ink/40 font-medium whitespace-nowrap">已用 {{ 100 - remainingPercent }}%</span>
+              </div>
+              <p class="text-xs font-semibold text-ink/60 whitespace-nowrap">₩{{ formatNumber(remainingBudgetKrw) }}</p>
             </div>
           </div>
         </div>
@@ -225,7 +272,7 @@
             <span class="block text-[9px] font-bold opacity-75">DAY {{ index + 1 }}</span>
             <span class="block mt-1 text-base font-bold leading-none">{{ day.day }}</span>
             <span class="block mt-1 text-[10px] opacity-70">{{ day.weekday }}</span>
-            <span v-if="getWeatherForDate(day.date)" class="block mt-1 text-[10px]">{{ getWeatherForDate(day.date).emoji }}</span>
+            <span class="block mt-1 text-[10px]" :style="{ visibility: getWeatherForDate(day.date) ? 'visible' : 'hidden' }">{{ getWeatherForDate(day.date) ? getWeatherForDate(day.date).emoji : '☀' }}</span>
           </button>
         </div>
       </div>
@@ -438,6 +485,14 @@
               <button @click="honorificMode = 'general'" class="py-2 text-xs font-bold rounded-lg transition" :class="honorificMode === 'general' ? 'bg-sageDeep text-white shadow-sm' : 'text-ink/60'">一般敬語 (~요)</button>
               <button @click="honorificMode = 'highest'" class="py-2 text-xs font-bold rounded-lg transition" :class="honorificMode === 'highest' ? 'bg-[#7b6aa6] text-white shadow-sm' : 'text-ink/60'">最高敬語 (~습니다)</button>
             </div>
+            <!-- 語速切換 -->
+            <div class="mt-3 pt-3 border-t border-white/60 flex items-center justify-between">
+              <span class="text-xs font-bold text-ink">播放語速</span>
+              <div class="flex items-center gap-1 bg-white/80 p-1 rounded-xl border border-line">
+                <button @click="ttsSpeed = 'slow'" class="py-1.5 px-3 text-xs font-bold rounded-lg transition" :class="ttsSpeed === 'slow' ? 'bg-sageDeep text-white shadow-sm' : 'text-ink/60'">🐢 慢速</button>
+                <button @click="ttsSpeed = 'normal'" class="py-1.5 px-3 text-xs font-bold rounded-lg transition" :class="ttsSpeed === 'normal' ? 'bg-sageDeep text-white shadow-sm' : 'text-ink/60'">正常</button>
+              </div>
+            </div>
           </div>
 
           <div class="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
@@ -453,7 +508,7 @@
                 <p class="mt-1 text-[11px] font-semibold text-sageDeep">{{ honorificMode === 'highest' ? phrase.pronounceHighest : phrase.pronounceGeneral }}</p>
                 <p v-if="phrase.tip" class="mt-2 text-[10px] text-ink/60 bg-fog p-2 rounded-xl border border-line">💡 {{ phrase.tip }}</p>
               </div>
-              <button @click="speakKorean(honorificMode === 'highest' ? phrase.highest : phrase.general)" class="w-10 h-10 rounded-2xl bg-mint text-sageDeep grid place-items-center shrink-0 shadow-2xs self-center"><i data-lucide="volume-2" class="w-4.5 h-4.5"></i></button>
+              <button @click="playKorean(phrase)" class="w-10 h-10 rounded-2xl bg-mint text-sageDeep grid place-items-center shrink-0 shadow-2xs self-center transition-all" :class="{ 'tts-pulse bg-sageDeep text-white': ttsPlaying === phrase.id }"><i data-lucide="volume-2" class="w-4.5 h-4.5"></i></button>
             </article>
           </div>
         </section>
@@ -474,6 +529,17 @@
         </button>
       </div>
     </nav>
+
+    <!-- Korean Fullscreen Overlay -->
+    <div v-if="ttsFullscreen" class="korean-fullscreen" @click="closeTtsFullscreen">
+      <div class="fs-korean" lang="ko">{{ ttsFullscreen.korean }}</div>
+      <div class="fs-chinese">{{ ttsFullscreen.chinese }}</div>
+      <div class="fs-pronounce">{{ ttsFullscreen.pronounce }}</div>
+      <div class="fs-wave">
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <p class="mt-8 text-[11px] text-white/30 font-semibold">點擊任意處關閉</p>
+    </div>
 
     <!-- Plan Modal -->
     <transition name="modal">
@@ -576,7 +642,7 @@
               </label>
               <label class="text-xs font-semibold">付款人
                 <select v-model="expenseForm.payers[0].name" class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-3 font-normal">
-                  <option v-for="m in trip.memberNames" :key="m">{{m}}</option>
+                  <option v-for="m in sortedMemberNames" :key="m" :value="m">{{ displayMemberName(m) }}</option>
                 </select>
               </label>
             </div>
@@ -610,14 +676,14 @@
                   <label class="block text-xs font-bold text-sageDeep mb-2">付款人 (誰先付錢的？)</label>
                   <div v-for="(payer, idx) in (expenseForm.payers || [])" :key="'p'+idx" class="flex gap-2 mt-1">
                     <select v-model="payer.name" class="w-1/2 h-10 rounded-xl bg-fog border border-line px-2 text-xs">
-                      <option v-for="m in trip.memberNames" :key="m">{{m}}</option>
+                      <option v-for="m in sortedMemberNames" :key="m" :value="m">{{ displayMemberName(m) }}</option>
                     </select>
                     <input v-model.number="payer.amount" type="number" class="w-1/2 h-10 rounded-xl bg-fog border border-line px-2 text-xs" :placeholder="'金額 (' + expenseForm.currency + ')'">
                     <button type="button" @click="expenseForm.payers.splice(idx, 1)" class="w-8 h-10 flex items-center justify-center text-red-400 font-bold" v-if="(expenseForm.payers || []).length > 1">X</button>
                   </div>
                   <!-- #7: 剩餘金額提示 -->
                   <p v-if="payerRemainingHint && (expenseForm.payers || []).length > 1" class="mt-1.5 text-[10px] font-semibold" :class="payerRemainingHint.startsWith('✓') ? 'text-sageDeep' : payerRemainingHint.startsWith('⚠') ? 'text-red-400' : 'text-ink/50'">{{ payerRemainingHint }}</p>
-                  <button type="button" @click="(expenseForm.payers = expenseForm.payers || []).push({name: trip.memberNames[1] || trip.memberNames[0], amount: ''})" class="mt-2 text-[10px] font-bold text-sageDeep flex items-center gap-1"><i data-lucide="plus" class="w-3 h-3"></i>新增多位付款人</button>
+                  <button type="button" @click="(expenseForm.payers = expenseForm.payers || []).push({name: sortedMemberNames[1] || sortedMemberNames[0], amount: ''})" class="mt-2 text-[10px] font-bold text-sageDeep flex items-center gap-1"><i data-lucide="plus" class="w-3 h-3"></i>新增多位付款人</button>
                 </div>
 
                 <div class="border-t border-line pt-3 mt-2">
@@ -628,7 +694,7 @@
                     <option value="ratio">依比例分攤</option>
                   </select>
                   <div v-for="(split, idx) in (expenseForm.splits || [])" :key="'s'+idx" class="flex gap-2 mt-1 items-center">
-                    <span class="w-1/3 text-xs font-semibold pl-1">{{ split.name }}</span>
+                    <span class="w-1/3 text-xs font-semibold pl-1">{{ displayMemberName(split.name) }}</span>
                     <input v-if="expenseForm.splitType === 'exact'" v-model.number="split.value" type="number" class="w-2/3 h-10 rounded-xl bg-fog border border-line px-2 text-xs" :placeholder="'應付金額 (' + expenseForm.currency + ')'">
                     <input v-else-if="expenseForm.splitType === 'ratio'" v-model.number="split.value" type="number" class="w-2/3 h-10 rounded-xl bg-fog border border-line px-2 text-xs" placeholder="輸入比例 (例如 1)">
                     <span v-else class="text-xs text-ink/50 w-2/3 pl-2">系統自動平分</span>
@@ -757,9 +823,9 @@
             <p class="text-xs font-bold text-ink/60 mb-2">💸 建議轉帳</p>
             <div v-for="(t, idx) in settlementDetails" :key="idx" class="flex items-center justify-between bg-white rounded-2xl px-4 py-3 border border-line shadow-sm">
               <div class="flex items-center gap-2">
-                <span class="text-sm font-bold text-ink">{{ t.from }}</span>
+                <span class="text-sm font-bold text-ink">{{ displayMemberName(t.from) }}</span>
                 <span class="text-ink/30">→</span>
-                <span class="text-sm font-bold text-ink">{{ t.to }}</span>
+                <span class="text-sm font-bold text-ink">{{ displayMemberName(t.to) }}</span>
               </div>
               <span class="text-sm font-bold text-sageDeep">{{ money(t.amount) }}</span>
             </div>
@@ -789,6 +855,20 @@
                 <p v-if="cloudTripId" class="text-[9px] text-sageDeep font-bold mt-1">✓ 已啟用雲端同步</p>
               </div>
             </button>
+            <!-- 共編身份設定 -->
+            <div v-if="cloudTripId" class="rounded-[20px] bg-white border border-line p-4 shadow-sm">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <span class="w-9 h-9 rounded-xl bg-mint grid place-items-center shrink-0"><i data-lucide="user-check" class="w-4 h-4 text-sageDeep"></i></span>
+                  <div>
+                    <p class="text-[10px] text-ink/45 font-bold">我的共編身份</p>
+                    <p class="font-bold text-sm text-ink">{{ myIdentity || '尚未設定' }}</p>
+                  </div>
+                </div>
+                <button @click="modal = 'identity'" class="text-xs font-bold text-sageDeep bg-mint px-3 py-1.5 rounded-xl">{{ myIdentity ? '更換' : '設定' }}</button>
+              </div>
+              <p v-if="!myIdentity" class="mt-2 text-[10px] text-[#d4836b] font-semibold">⚠️ 建議設定身份，記帳時才不會跟旅伴搞混</p>
+            </div>
             <button @click="shareTripLink" class="w-full rounded-[20px] bg-white border border-line p-4 shadow-sm text-left flex items-center gap-4">
               <span class="w-11 h-11 rounded-2xl bg-[#e8e0ef] grid place-items-center shrink-0"><i data-lucide="link" class="w-5 h-5 text-[#7b6aa6]"></i></span>
               <div>
@@ -819,6 +899,39 @@
             </button>
           </div>
           <input ref="importFileInput" type="file" accept=".json" class="hidden" @change="handleImportFile">
+        </div>
+      </div>
+    </transition>
+
+    <!-- Identity Picker Modal (共編身份選擇) -->
+    <transition name="modal">
+      <div v-if="modal === 'identity'" class="fixed inset-0 z-[1000] bg-ink/35 flex items-end justify-center" @click.self="closeModal">
+        <div class="modal-card w-full max-w-[440px] rounded-t-[30px] bg-fog p-5 pb-8 shadow-float" role="dialog" aria-modal="true" aria-label="選擇身份">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <p class="text-[10px] tracking-widest text-sageDeep font-bold uppercase">IDENTITY</p>
+              <h2 class="text-xl font-bold">你是哪一位？</h2>
+            </div>
+            <button @click="closeModal" class="w-9 h-9 rounded-xl bg-white grid place-items-center"><i data-lucide="x" class="w-4 h-4"></i></button>
+          </div>
+          <p class="text-xs text-ink/60 mb-4">共編模式下，選擇你的名字可以避免記帳時角色混淆。此設定僅存在本裝置。</p>
+          <div class="space-y-2.5">
+            <button
+              v-for="name in trip.memberNames"
+              :key="name"
+              @click="myIdentity = name; closeModal(); showToast('已設定身份：' + name)"
+              class="w-full rounded-[20px] p-4 text-left flex items-center gap-4 border transition"
+              :class="myIdentity === name ? 'bg-mint/50 border-sageDeep shadow-card' : 'bg-white border-line shadow-sm hover:border-sageDeep'"
+            >
+              <span class="w-11 h-11 rounded-2xl grid place-items-center shrink-0" :class="myIdentity === name ? 'bg-sageDeep text-white' : 'bg-fog text-ink/40'">
+                <i data-lucide="user" class="w-5 h-5"></i>
+              </span>
+              <div class="flex-1">
+                <h3 class="font-bold text-sm text-ink">{{ name }}</h3>
+                <p v-if="myIdentity === name" class="text-[10px] text-sageDeep font-bold mt-0.5">✓ 目前身份</p>
+              </div>
+            </button>
+          </div>
         </div>
       </div>
     </transition>
@@ -1104,6 +1217,10 @@
         const honorificMode = ref('general');
         const koreanFilter = ref('全部');
         const expenseFilter = ref('all');
+        // TTS 狀態
+        const ttsSpeed = ref('normal');
+        const ttsPlaying = ref(null);
+        const ttsFullscreen = ref(null);
 
         const planForm = ref({});
         const expenseForm = ref({});
@@ -1189,10 +1306,35 @@
         const debouncedSaveLocal = debounce(saveLocal, CONFIG.DEBOUNCE_MS);
         watch([trip, plans, expenses], debouncedSaveLocal, { deep: true });
 
+        // ===== 共編身份識別 (Local Identity) =====
+        const myIdentity = ref(localStorage.getItem('hamkke-my-identity') || '');
+        watch(myIdentity, (val) => {
+          if (val) localStorage.setItem('hamkke-my-identity', val);
+          else localStorage.removeItem('hamkke-my-identity');
+        });
+
         // ===== Firebase Cloud Sync =====
         const cloudTripId = ref(localStorage.getItem('hamkke-cloud-trip-id') || '');
         const syncStatus = ref('idle'); // idle | syncing | synced | offline | error
         let _skipRemoteUpdate = false; // 防止 onSnapshot 回寫時觸發重複上傳
+
+        // 顯示名稱：如果是自己就加上「我」標記
+        function displayMemberName(name) {
+          if (!myIdentity.value || !cloudTripId.value) return name;
+          if (name === myIdentity.value) return `${name} (我)`;
+          return name;
+        }
+
+        // 成員列表排序：自己排第一位
+        const sortedMemberNames = computed(() => {
+          const members = trip.value.memberNames || ['我', '旅伴'];
+          if (!myIdentity.value || !cloudTripId.value) return members;
+          return [...members].sort((a, b) => {
+            if (a === myIdentity.value) return -1;
+            if (b === myIdentity.value) return 1;
+            return 0;
+          });
+        });
 
         // 儲存 cloudTripId 到 localStorage
         watch(cloudTripId, (id) => {
@@ -1287,6 +1429,10 @@
             showToast('已加入共編旅程！');
             // 清除 URL 參數
             window.history.replaceState({}, '', window.location.pathname);
+            // 如果尚未設定身份，彈出身份選擇器
+            if (!myIdentity.value) {
+              nextTick(() => { modal.value = 'identity'; lockScroll(); nextTick(() => window.lucide && window.lucide.createIcons()); });
+            }
             return true;
           } else {
             syncStatus.value = 'error';
@@ -1319,6 +1465,10 @@
             showToast('雲端共編連結已複製！');
           }
           closeModal();
+          // 首次啟用且未設定身份時，提示設定
+          if (!myIdentity.value) {
+            nextTick(() => { modal.value = 'identity'; lockScroll(); nextTick(() => window.lucide && window.lucide.createIcons()); });
+          }
         }
 
         // #10: 幣別切換時自動調整匯率預設值（僅在新增模式下生效）
@@ -1369,9 +1519,16 @@
 
         const selectedPlans = computed(() => plans.value
           .filter(p => p.date === selectedDate.value)
-          .sort((a, b) => Number.isFinite(Number(a.order)) && Number.isFinite(Number(b.order))
-            ? Number(a.order) - Number(b.order)
-            : String(a.time || '').localeCompare(String(b.time || ''))));
+          .sort((a, b) => {
+            const timeA = String(a.time || '99:99');
+            const timeB = String(b.time || '99:99');
+            const timeCmp = timeA.localeCompare(timeB);
+            if (timeCmp !== 0) return timeCmp;
+            // 時間相同時按 order 排序（維持拖曳順序）
+            const orderA = Number.isFinite(Number(a.order)) ? Number(a.order) : 9999;
+            const orderB = Number.isFinite(Number(b.order)) ? Number(b.order) : 9999;
+            return orderA - orderB;
+          }));
 
         // 今日分頁固定顯示今天的資料
         const todayPlans = computed(() => {
@@ -1390,6 +1547,23 @@
         const totalPlans = computed(() => plans.value.length);
         const totalSpentTwd = computed(() => expenses.value.reduce((sum, item) => sum + Number(item.amount || 0) * Number(item.rate || 1), 0));
         const budgetPercent = computed(() => Math.min(100, trip.value.budget ? (totalSpentTwd.value / trip.value.budget) * 100 : 0));
+        const remainingBudget = computed(() => Math.max(0, (trip.value.budget || 0) - totalSpentTwd.value));
+        const remainingDays = computed(() => {
+          const today = new Date(); today.setHours(0,0,0,0);
+          const end = parseLocalDate(trip.value.endDate);
+          if (isNaN(end.getTime())) return 1;
+          const diff = Math.ceil((end - today) / 86400000) + 1;
+          return Math.max(1, diff);
+        });
+        const dailyBudget = computed(() => Math.round(remainingBudget.value / remainingDays.value));
+        const remainingPercent = computed(() => trip.value.budget ? Math.max(0, Math.min(100, (remainingBudget.value / trip.value.budget) * 100)) : 100);
+        const latestKrwRate = computed(() => {
+          const krwExpenses = expenses.value.filter(e => e.currency === 'KRW' && Number(e.rate) > 0);
+          if (krwExpenses.length) return Number(krwExpenses[krwExpenses.length - 1].rate);
+          return CONFIG.DEFAULT_RATE_KRW_TWD;
+        });
+        const remainingBudgetKrw = computed(() => Math.round(remainingBudget.value / latestKrwRate.value));
+        const dailyBudgetKrw = computed(() => Math.round(dailyBudget.value / latestKrwRate.value));
         const filteredExpenses = computed(() => expenseFilter.value === 'all' ? expenses.value : expenses.value.filter(e => e.category === expenseFilter.value));
         const filteredKoreanPhrases = computed(() => koreanFilter.value === '全部' ? koreanPhrases : koreanPhrases.filter(p => p.category === koreanFilter.value));
 
@@ -1478,9 +1652,9 @@
           }
           if (debtors.length === 0) return '目前帳目結清，無人欠款。';
           if (debtors.length === 1 && creditors.length === 1) {
-            return `${debtors[0].name} 需給 ${creditors[0].name} ${money(debtors[0].amount)}`;
+            return `${displayMemberName(debtors[0].name)} 需給 ${displayMemberName(creditors[0].name)} ${money(debtors[0].amount)}`;
           }
-          return debtors.map(d => `${d.name} 需付 ${money(d.amount)}`).join('\n');
+          return debtors.map(d => `${displayMemberName(d.name)} 需付 ${money(d.amount)}`).join('\n');
         });
 
         // #11: 結算明細（手動觸發顯示）
@@ -1723,9 +1897,11 @@
           } else {
             expenseQuickMode.value = !expense;
           }
+          // 預設付款人：有設定身份就用身份，否則用成員列表第一位
+          const defaultPayer = myIdentity.value && trip.value.memberNames.includes(myIdentity.value) ? myIdentity.value : trip.value.memberNames[0];
           expenseForm.value = expense
-            ? { ...expense, payers: Array.isArray(expense.payers) && expense.payers.length ? expense.payers.map(p => ({...p})) : [{name: trip.value.memberNames[0], amount: ''}], splits: Array.isArray(expense.splits) && expense.splits.length ? expense.splits.map(s => ({...s})) : trip.value.memberNames.map(n=>({name:n, value:1})) }
-            : { id: '', title: '', amount: null, currency: detectedCurrency.value || 'KRW', category: '美食', payment: 'cash', date: formatISO(new Date()), rate: CONFIG.DEFAULT_RATE_KRW_TWD, payers: [{name: trip.value.memberNames[0], amount: ''}], splitType: 'equal', splits: trip.value.memberNames.map(n=>({name:n, value:1})) };
+            ? { ...expense, payers: Array.isArray(expense.payers) && expense.payers.length ? expense.payers.map(p => ({...p})) : [{name: defaultPayer, amount: ''}], splits: Array.isArray(expense.splits) && expense.splits.length ? expense.splits.map(s => ({...s})) : trip.value.memberNames.map(n=>({name:n, value:1})) }
+            : { id: '', title: '', amount: null, currency: detectedCurrency.value || 'KRW', category: '美食', payment: 'cash', date: formatISO(new Date()), rate: CONFIG.DEFAULT_RATE_KRW_TWD, payers: [{name: defaultPayer, amount: ''}], splitType: 'equal', splits: trip.value.memberNames.map(n=>({name:n, value:1})) };
           modal.value = 'expense';
           lockScroll();
           nextTick(() => window.lucide && window.lucide.createIcons());
@@ -2319,13 +2495,15 @@
         // #14: iOS TTS 相容性修復 — 支援 iPhone Safari 語音朗讀
         let cachedKoreanVoice = null;
         let voicesReady = false;
+        let currentAudio = null;
 
         function loadVoices() {
           const voices = window.speechSynthesis.getVoices();
           if (voices.length) {
             voicesReady = true;
-            // 優先選擇 iOS 內建韓語語音，再回退至任何 ko 語音
-            cachedKoreanVoice = voices.find(v => v.lang === 'ko-KR' && v.localService) ||
+            // 優先選擇高品質韓語語音
+            cachedKoreanVoice = voices.find(v => v.lang === 'ko-KR' && v.name.includes('Yuna')) ||
+                                voices.find(v => v.lang === 'ko-KR' && v.localService) ||
                                 voices.find(v => v.lang.startsWith('ko')) || null;
           }
         }
@@ -2338,32 +2516,68 @@
         // iOS Safari 15s 暫停 bug workaround
         let iosResumeTimer = null;
 
-        function speakKorean(text) {
-          if (!('speechSynthesis' in window)) return showToast('此裝置不支援語音功能');
+        // Google Translate TTS (主要方案) + speechSynthesis fallback
+
+        function speakKorean(text, onEnd) {
+          stopCurrentAudio();
+
+          // 慢速模式：直接用 speechSynthesis（rate 控制最可靠）
+          if (ttsSpeed.value === 'slow') {
+            speakKoreanFallback(text, onEnd);
+            return;
+          }
+
+          // 正常速度：用 Google Translate TTS（音質較好）
+          const encodedText = encodeURIComponent(text);
+          const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=ko&client=tw-ob&q=${encodedText}`;
+
+          currentAudio = new Audio(url);
+          currentAudio.onended = () => {
+            currentAudio = null;
+            if (onEnd) onEnd();
+          };
+          currentAudio.onerror = () => {
+            currentAudio = null;
+            speakKoreanFallback(text, onEnd);
+          };
+
+          const playPromise = currentAudio.play();
+          if (playPromise) {
+            playPromise.catch(() => {
+              currentAudio = null;
+              speakKoreanFallback(text, onEnd);
+            });
+          }
+        }
+
+        function speakKoreanFallback(text, onEnd) {
+          if (!('speechSynthesis' in window)) {
+            showToast('此裝置不支援語音功能');
+            if (onEnd) onEnd();
+            return;
+          }
           try {
-            // 取消任何進行中的語音 & 清除 iOS timer
             window.speechSynthesis.cancel();
             if (iosResumeTimer) { clearInterval(iosResumeTimer); iosResumeTimer = null; }
-
-            // 若語音列表尚未載入，嘗試同步取得
             if (!voicesReady) loadVoices();
 
             const u = new SpeechSynthesisUtterance(text);
             u.lang = 'ko-KR';
-            u.rate = 0.85;
+            u.rate = ttsSpeed.value === 'slow' ? 0.6 : 0.85;
             if (cachedKoreanVoice) u.voice = cachedKoreanVoice;
 
             u.onerror = (e) => {
               if (iosResumeTimer) { clearInterval(iosResumeTimer); iosResumeTimer = null; }
               if (e.error !== 'canceled') showToast('語音播放失敗，請確認裝置未靜音');
+              if (onEnd) onEnd();
             };
             u.onend = () => {
               if (iosResumeTimer) { clearInterval(iosResumeTimer); iosResumeTimer = null; }
+              if (onEnd) onEnd();
             };
 
             window.speechSynthesis.speak(u);
 
-            // iOS Safari bug: 超過 ~15s 會自動暫停，用 resume 定時喚醒
             const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
             if (isIOS) {
               iosResumeTimer = setInterval(() => {
@@ -2377,7 +2591,54 @@
             }
           } catch (err) {
             showToast('語音播放失敗，請確認裝置未靜音');
+            if (onEnd) onEnd();
           }
+        }
+
+        function stopCurrentAudio() {
+          if (currentAudio) {
+            currentAudio.pause();
+            currentAudio.src = '';
+            currentAudio = null;
+          }
+          if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+          if (iosResumeTimer) { clearInterval(iosResumeTimer); iosResumeTimer = null; }
+        }
+
+        // 播放韓語 + 全螢幕顯示
+        function playKorean(phrase) {
+          const koreanText = honorificMode.value === 'highest' ? phrase.highest : phrase.general;
+          const pronounce = honorificMode.value === 'highest' ? phrase.pronounceHighest : phrase.pronounceGeneral;
+
+          // 如果正在播放同一個，停止
+          if (ttsPlaying.value === phrase.id) {
+            stopCurrentAudio();
+            ttsPlaying.value = null;
+            ttsFullscreen.value = null;
+            return;
+          }
+
+          // 開始播放
+          ttsPlaying.value = phrase.id;
+          ttsFullscreen.value = {
+            korean: koreanText,
+            chinese: phrase.chinese,
+            pronounce: pronounce
+          };
+
+          speakKorean(koreanText, () => {
+            ttsPlaying.value = null;
+            // 播完後全螢幕再停留 1.5 秒讓使用者看清楚
+            setTimeout(() => {
+              if (!ttsPlaying.value) ttsFullscreen.value = null;
+            }, 1500);
+          });
+        }
+
+        function closeTtsFullscreen() {
+          stopCurrentAudio();
+          ttsPlaying.value = null;
+          ttsFullscreen.value = null;
         }
 
         // ===== 天氣 API (Open-Meteo, 免費無需 API Key) =====
@@ -2443,6 +2704,7 @@
                   date,
                   maxTemp: Math.round(maxT),
                   minTemp: Math.round(minT),
+                  code,
                   ...weatherCodeToInfo(code)
                 };
               }).filter(Boolean)
@@ -2480,8 +2742,50 @@
           return futurePlans.length > 0 ? futurePlans[0] : null;
         });
 
+        // 今日剩餘行程數（含 nextStop）
+        // 開發/預覽模式：如果今天沒有行程，就用選中日期的全部行程數量作為 fallback
+        const remainingStops = computed(() => {
+          const now = new Date();
+          const todayIso = formatISO(now);
+          const currentTime = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+          const todayRemaining = plans.value.filter(p => p.date === todayIso && p.time > currentTime).length;
+          if (todayRemaining > 0) return todayRemaining;
+          // fallback: 顯示選中日期的總行程數，方便非當日預覽
+          return plans.value.filter(p => p.date === selectedDate.value).length;
+        });
+
         // 當前選中日期的天氣
         const selectedDateWeather = computed(() => getWeatherForDate(selectedDate.value));
+
+        // 天氣穿搭小叮嚀
+        const weatherTip = computed(() => {
+          const w = selectedDateWeather.value;
+          if (!w) return '';
+          const max = w.maxTemp;
+          const min = w.minTemp;
+          const code = w.code;
+          
+          // 基本穿搭建議（依氣溫）
+          let clothing = '';
+          if (max >= 30) clothing = '短袖短褲，注意防曬補水';
+          else if (max >= 26) clothing = '短袖即可，帶薄外套備用';
+          else if (max >= 21) clothing = '薄長袖或短袖＋薄外套';
+          else if (max >= 15) clothing = '外套＋長褲，早晚偏涼';
+          else if (max >= 10) clothing = '厚外套＋長褲，注意保暖';
+          else if (max >= 5) clothing = '大衣＋圍巾，做好禦寒';
+          else clothing = '羽絨衣＋保暖配件，極寒注意';
+          
+          // 天氣附加提醒
+          const extras = [];
+          if (code >= 95) extras.push('⚡ 雷雨避免戶外');
+          else if (code >= 71 && code <= 86) extras.push('🥾 穿防滑鞋，注意路面');
+          else if (code >= 51 && code <= 69) extras.push('☂️ 記得帶傘');
+          else if (code >= 80 && code <= 82) extras.push('☂️ 陣雨帶傘');
+          if (max >= 28 && code <= 2) extras.push('🧴 防曬必備');
+          if (min <= 5 && max - min >= 12) extras.push('🌡️ 日夜溫差大');
+          
+          return clothing + (extras.length ? '｜' + extras.join(' ') : '');
+        });
 
         // 今日天氣
         const todayWeather = computed(() => {
@@ -2555,9 +2859,10 @@
           tabs, planCategories, expenseCategories, currencies, koreanCategories, koreanPhrases,
           safeUnlocked, safeCodeError, safeCodeRefs, safeContacts, safeInfoType, dragState,
           tripDays, selectedPlans, todayPlans, activeDay, selectedDayName, totalPlans, totalSpentTwd, budgetPercent,
+          remainingBudget, remainingDays, dailyBudget, remainingPercent, remainingBudgetKrw, dailyBudgetKrw,
           filteredExpenses, filteredKoreanPhrases, settlementMessage, settlementDetails, settlementBalances,
           payerRemainingHint,
-          weather, nextStop, selectedDateWeather, todayWeather, todayHotel, getWeatherForDate,
+          weather, nextStop, remainingStops, selectedDateWeather, weatherTip, todayWeather, todayHotel, getWeatherForDate,
           formatDateRange, shortDate, money, formatNumber, currencySymbol, categoryStyle,
           transportIcon, transportLabel, paymentLabel, openNavigation, moveSchedule, setFontSize, openModal,
           openPlanForm, savePlan, deletePlan, openExpenseForm, saveExpense, deleteExpense,
@@ -2566,13 +2871,17 @@
           openSafeCode, handleSafeCodeInput, handleSafeCodeDelete, verifySafeCode,
           handleDragStart, handleDragOver, handleDragEnd, handleTouchStart, handleTouchMove, handleTouchEnd,
           handleSwipeStart, handleSwipeMove, handleSwipeEnd, swipeStyle,
+          // TTS
+          ttsSpeed, ttsPlaying, ttsFullscreen, playKorean, closeTtsFullscreen,
           // Phase 5
           tripList, currentTripId, importPreview, importFileInput,
           switchTrip, createNewTrip, deleteTrip,
           shareTripLink, shareScreenshot, exportTripJSON, triggerImportJSON, handleImportFile,
           confirmImport, cancelImport, autoCurrency,
           // Firebase Cloud Sync
-          cloudTripId, syncStatus, enableCloudSync, joinSharedTrip, shareCloudLink
+          cloudTripId, syncStatus, enableCloudSync, joinSharedTrip, shareCloudLink,
+          // 共編身份
+          myIdentity, displayMemberName, sortedMemberNames
         };
       }
     }).mount('#app');

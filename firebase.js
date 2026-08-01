@@ -189,8 +189,11 @@ async function joinCloudTrip(tripId) {
     const data = doc.data();
     if (!data.members.includes(uid)) {
       await tripRef.update({
-        members: firebase.firestore.FieldValue.arrayUnion(uid)
+        members: firebase.firestore.FieldValue.arrayUnion(uid),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       });
+      // 等待 members 更新確認（避免後續 subcollection 寫入被 rules 擋住）
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
 
     // 讀取 plans 和 expenses
@@ -224,8 +227,14 @@ async function joinCloudTrip(tripId) {
 async function saveTripMeta(tripId, tripMeta) {
   if (!_onlineMode || !db || !tripId) return;
   try {
+    // 不要覆蓋 members/createdBy 等系統欄位
+    const cleanMeta = { ...tripMeta };
+    delete cleanMeta.members;
+    delete cleanMeta.createdBy;
+    delete cleanMeta.createdAt;
+    delete cleanMeta.updatedAt;
     await db.collection('trips').doc(tripId).update({
-      ...tripMeta,
+      ...cleanMeta,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
   } catch (err) {
@@ -235,15 +244,21 @@ async function saveTripMeta(tripId, tripMeta) {
 
 /**
  * 儲存單筆 plan
+ * @returns {Promise<boolean>} 是否成功
  */
 async function savePlanDoc(tripId, plan) {
-  if (!_onlineMode || !db || !tripId) return;
+  if (!_onlineMode || !db || !tripId) return false;
   try {
+    // 清除非序列化欄位
+    const cleanPlan = { ...plan };
+    delete cleanPlan.updatedAt;
     await db.collection('trips').doc(tripId)
       .collection('plans').doc(plan.id)
-      .set({ ...plan, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      .set({ ...cleanPlan, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    return true;
   } catch (err) {
     console.error('[Firebase] 儲存 plan 失敗:', err);
+    return false;
   }
 }
 
@@ -262,15 +277,20 @@ async function deletePlanDoc(tripId, planId) {
 
 /**
  * 儲存單筆 expense
+ * @returns {Promise<boolean>} 是否成功
  */
 async function saveExpenseDoc(tripId, expense) {
-  if (!_onlineMode || !db || !tripId) return;
+  if (!_onlineMode || !db || !tripId) return false;
   try {
+    const cleanExpense = { ...expense };
+    delete cleanExpense.updatedAt;
     await db.collection('trips').doc(tripId)
       .collection('expenses').doc(expense.id)
-      .set({ ...expense, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      .set({ ...cleanExpense, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    return true;
   } catch (err) {
     console.error('[Firebase] 儲存 expense 失敗:', err);
+    return false;
   }
 }
 

@@ -7,31 +7,30 @@ service cloud.firestore {
 
     // 旅程主文件
     match /trips/{tripId} {
-      // 任何已登入使用者可以讀取（需知道 tripId）
-      // 加入 trip 後才能寫入
+      // 已登入的使用者可讀取（需知道 tripId，tripId 本身是隨機不可猜測的）
       allow read: if request.auth != null;
+      // 任何已登入使用者可建立旅程
       allow create: if request.auth != null;
+      // members 內的人可以更新旅程設定
       allow update: if request.auth != null
         && request.auth.uid in resource.data.members;
+      // 只有建立者可以刪除
       allow delete: if request.auth != null
         && request.auth.uid == resource.data.createdBy;
 
-      // 允許新使用者透過 arrayUnion 加入 members
-      // (joinCloudTrip 時需要寫入 members 欄位)
+      // 允許新使用者加入（只能新增 members，不能移除）
       allow update: if request.auth != null
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'updatedAt'])
         && request.resource.data.members.hasAll(resource.data.members);
 
-      // Plans subcollection
+      // Plans subcollection — 任何已登入且知道 tripId 的人可讀寫
       match /plans/{planId} {
-        allow read, write: if request.auth != null
-          && request.auth.uid in get(/databases/$(database)/documents/trips/$(tripId)).data.members;
+        allow read, write: if request.auth != null;
       }
 
-      // Expenses subcollection
+      // Expenses subcollection — 同上
       match /expenses/{expenseId} {
-        allow read, write: if request.auth != null
-          && request.auth.uid in get(/databases/$(database)/documents/trips/$(tripId)).data.members;
+        allow read, write: if request.auth != null;
       }
     }
   }
