@@ -1741,42 +1741,11 @@
             return;
           }
 
-          const modeMap = { walk: 'walk', taxi: 'car', subway: 'transit', flight: 'transit' };
-          const mode = modeMap[plan.transport] || 'transit';
-          const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
-
-          // 判斷是否有實際座標（非 0 且非 undefined）
-          const hasDestCoords = plan.lat && plan.lng && plan.lat !== 0 && plan.lng !== 0;
-          const hasOriginCoords = fromPlan && fromPlan.lat && fromPlan.lng && fromPlan.lat !== 0 && fromPlan.lng !== 0;
-
-          if (isMobile) {
-            let naverAppUrl;
-
-            if (hasDestCoords && origin && hasOriginCoords) {
-              // 有起終點座標 → 使用完整路線導航
-              naverAppUrl = `nmap://route/${mode}?slat=${fromPlan.lat}&slng=${fromPlan.lng}&sname=${encodeURIComponent(origin)}&dlat=${plan.lat}&dlng=${plan.lng}&dname=${encodeURIComponent(destination)}&appname=hamkke.travel`;
-            } else if (hasDestCoords) {
-              // 只有目的地座標 → 路線導航（起點用目前位置）
-              naverAppUrl = `nmap://route/${mode}?dlat=${plan.lat}&dlng=${plan.lng}&dname=${encodeURIComponent(destination)}&appname=hamkke.travel`;
-            } else if (origin && destination) {
-              // 沒有座標但有起終點名稱 → 搜尋目的地（避免 lat=0 造成 out of range）
-              naverAppUrl = `nmap://search?query=${encodeURIComponent(destination)}&appname=hamkke.travel`;
-            } else {
-              // 只有目的地名稱 → 搜尋
-              naverAppUrl = `nmap://search?query=${encodeURIComponent(destination)}&appname=hamkke.travel`;
-            }
-
-            const fallbackTimer = setTimeout(() => {
-              window.open(`https://map.naver.com/v5/search/${encodeURIComponent(destination)}`, '_blank', 'noopener');
-            }, 1500);
-            window.location.href = naverAppUrl;
-            window.addEventListener('visibilitychange', function handler() {
-              clearTimeout(fallbackTimer);
-              window.removeEventListener('visibilitychange', handler);
-            }, { once: true });
-          } else {
-            window.open(`https://map.naver.com/v5/search/${encodeURIComponent(destination)}`, '_blank', 'noopener');
-          }
+          // 統一使用 Naver Map 網頁版 URL（全球皆可正常使用）
+          // nmap:// URL scheme 在海外（韓國境外）會因 GPS 偵測報 "out of service range"
+          // 網頁版在韓國當地會自動提示使用者透過 APP 開啟（Universal Links）
+          const naverWebUrl = `https://map.naver.com/v5/search/${encodeURIComponent(destination)}`;
+          window.open(naverWebUrl, '_blank', 'noopener');
         }
 
         // Drag & Drop 排序 (支援 touch + mouse)
