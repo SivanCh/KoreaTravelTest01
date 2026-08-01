@@ -240,8 +240,8 @@
               </div>
             </div>
             <div v-else class="mt-3 py-2 text-center">
-              <p class="text-base font-bold text-ink">✨ 今日行程已完成</p>
-              <p class="mt-1 text-xs text-ink/45">好好享受首爾吧</p>
+              <p class="text-base font-bold text-ink">✨ 這天還沒有行程</p>
+              <p class="mt-1 text-xs text-ink/45">可以到行程管理新增安排</p>
             </div>
 
             <!-- 底部：預算進度 -->
@@ -508,7 +508,9 @@
                 <p class="mt-1 text-[11px] font-semibold text-sageDeep">{{ honorificMode === 'highest' ? phrase.pronounceHighest : phrase.pronounceGeneral }}</p>
                 <p v-if="phrase.tip" class="mt-2 text-[10px] text-ink/60 bg-fog p-2 rounded-xl border border-line">💡 {{ phrase.tip }}</p>
               </div>
-              <button @click="playKorean(phrase)" class="w-10 h-10 rounded-2xl bg-mint text-sageDeep grid place-items-center shrink-0 shadow-2xs self-center transition-all" :class="{ 'tts-pulse bg-sageDeep text-white': ttsPlaying === phrase.id }"><i data-lucide="volume-2" class="w-4.5 h-4.5"></i></button>
+              <button @click="playKorean(phrase)" class="w-11 h-11 rounded-2xl bg-mint text-sageDeep grid place-items-center shrink-0 shadow-sm self-center transition-all" :class="{ 'tts-pulse bg-sageDeep text-white': ttsPlaying === phrase.id }">
+                <i :data-lucide="ttsPlaying === phrase.id ? 'pause' : 'volume-2'" class="w-5 h-5"></i>
+              </button>
             </article>
           </div>
         </section>
@@ -1743,34 +1745,37 @@
           const mode = modeMap[plan.transport] || 'transit';
           const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
 
-          if (origin && destination) {
-            if (isMobile) {
-              const naverAppUrl = `nmap://route/${mode}?slat=0&slng=0&sname=${encodeURIComponent(origin)}&dlat=0&dlng=0&dname=${encodeURIComponent(destination)}&appname=hamkke.travel`;
-              const fallbackTimer = setTimeout(() => {
-                window.open(`https://map.naver.com/v5/search/${encodeURIComponent(destination)}`, '_blank', 'noopener');
-              }, 1500);
-              window.location.href = naverAppUrl;
-              window.addEventListener('visibilitychange', function handler() {
-                clearTimeout(fallbackTimer);
-                window.removeEventListener('visibilitychange', handler);
-              }, { once: true });
+          // 判斷是否有實際座標（非 0 且非 undefined）
+          const hasDestCoords = plan.lat && plan.lng && plan.lat !== 0 && plan.lng !== 0;
+          const hasOriginCoords = fromPlan && fromPlan.lat && fromPlan.lng && fromPlan.lat !== 0 && fromPlan.lng !== 0;
+
+          if (isMobile) {
+            let naverAppUrl;
+
+            if (hasDestCoords && origin && hasOriginCoords) {
+              // 有起終點座標 → 使用完整路線導航
+              naverAppUrl = `nmap://route/${mode}?slat=${fromPlan.lat}&slng=${fromPlan.lng}&sname=${encodeURIComponent(origin)}&dlat=${plan.lat}&dlng=${plan.lng}&dname=${encodeURIComponent(destination)}&appname=hamkke.travel`;
+            } else if (hasDestCoords) {
+              // 只有目的地座標 → 路線導航（起點用目前位置）
+              naverAppUrl = `nmap://route/${mode}?dlat=${plan.lat}&dlng=${plan.lng}&dname=${encodeURIComponent(destination)}&appname=hamkke.travel`;
+            } else if (origin && destination) {
+              // 沒有座標但有起終點名稱 → 搜尋目的地（避免 lat=0 造成 out of range）
+              naverAppUrl = `nmap://search?query=${encodeURIComponent(destination)}&appname=hamkke.travel`;
             } else {
-              window.open(`https://map.naver.com/v5/search/${encodeURIComponent(destination)}`, '_blank', 'noopener');
+              // 只有目的地名稱 → 搜尋
+              naverAppUrl = `nmap://search?query=${encodeURIComponent(destination)}&appname=hamkke.travel`;
             }
+
+            const fallbackTimer = setTimeout(() => {
+              window.open(`https://map.naver.com/v5/search/${encodeURIComponent(destination)}`, '_blank', 'noopener');
+            }, 1500);
+            window.location.href = naverAppUrl;
+            window.addEventListener('visibilitychange', function handler() {
+              clearTimeout(fallbackTimer);
+              window.removeEventListener('visibilitychange', handler);
+            }, { once: true });
           } else {
-            if (isMobile) {
-              const naverAppUrl = `nmap://search?query=${encodeURIComponent(destination)}&appname=hamkke.travel`;
-              const fallbackTimer = setTimeout(() => {
-                window.open(`https://map.naver.com/v5/search/${encodeURIComponent(destination)}`, '_blank', 'noopener');
-              }, 1500);
-              window.location.href = naverAppUrl;
-              window.addEventListener('visibilitychange', function handler() {
-                clearTimeout(fallbackTimer);
-                window.removeEventListener('visibilitychange', handler);
-              }, { once: true });
-            } else {
-              window.open(`https://map.naver.com/v5/search/${encodeURIComponent(destination)}`, '_blank', 'noopener');
-            }
+            window.open(`https://map.naver.com/v5/search/${encodeURIComponent(destination)}`, '_blank', 'noopener');
           }
         }
 
@@ -2495,7 +2500,6 @@
         // #14: iOS TTS 相容性修復 — 支援 iPhone Safari 語音朗讀
         let cachedKoreanVoice = null;
         let voicesReady = false;
-        let currentAudio = null;
 
         function loadVoices() {
           const voices = window.speechSynthesis.getVoices();
@@ -2516,41 +2520,13 @@
         // iOS Safari 15s 暫停 bug workaround
         let iosResumeTimer = null;
 
-        // Google Translate TTS (主要方案) + speechSynthesis fallback
-
+        // TTS 主函式：統一使用 speechSynthesis（手機相容性最佳）
         function speakKorean(text, onEnd) {
           stopCurrentAudio();
-
-          // 慢速模式：直接用 speechSynthesis（rate 控制最可靠）
-          if (ttsSpeed.value === 'slow') {
-            speakKoreanFallback(text, onEnd);
-            return;
-          }
-
-          // 正常速度：用 Google Translate TTS（音質較好）
-          const encodedText = encodeURIComponent(text);
-          const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=ko&client=tw-ob&q=${encodedText}`;
-
-          currentAudio = new Audio(url);
-          currentAudio.onended = () => {
-            currentAudio = null;
-            if (onEnd) onEnd();
-          };
-          currentAudio.onerror = () => {
-            currentAudio = null;
-            speakKoreanFallback(text, onEnd);
-          };
-
-          const playPromise = currentAudio.play();
-          if (playPromise) {
-            playPromise.catch(() => {
-              currentAudio = null;
-              speakKoreanFallback(text, onEnd);
-            });
-          }
+          speakWithSpeechSynthesis(text, onEnd);
         }
 
-        function speakKoreanFallback(text, onEnd) {
+        function speakWithSpeechSynthesis(text, onEnd) {
           if (!('speechSynthesis' in window)) {
             showToast('此裝置不支援語音功能');
             if (onEnd) onEnd();
@@ -2563,7 +2539,7 @@
 
             const u = new SpeechSynthesisUtterance(text);
             u.lang = 'ko-KR';
-            u.rate = ttsSpeed.value === 'slow' ? 0.6 : 0.85;
+            u.rate = ttsSpeed.value === 'slow' ? 0.35 : 1;
             if (cachedKoreanVoice) u.voice = cachedKoreanVoice;
 
             u.onerror = (e) => {
@@ -2596,11 +2572,6 @@
         }
 
         function stopCurrentAudio() {
-          if (currentAudio) {
-            currentAudio.pause();
-            currentAudio.src = '';
-            currentAudio = null;
-          }
           if ('speechSynthesis' in window) window.speechSynthesis.cancel();
           if (iosResumeTimer) { clearInterval(iosResumeTimer); iosResumeTimer = null; }
         }
@@ -2615,6 +2586,7 @@
             stopCurrentAudio();
             ttsPlaying.value = null;
             ttsFullscreen.value = null;
+            nextTick(() => window.lucide && window.lucide.createIcons());
             return;
           }
 
@@ -2625,9 +2597,11 @@
             chinese: phrase.chinese,
             pronounce: pronounce
           };
+          nextTick(() => window.lucide && window.lucide.createIcons());
 
           speakKorean(koreanText, () => {
             ttsPlaying.value = null;
+            nextTick(() => window.lucide && window.lucide.createIcons());
             // 播完後全螢幕再停留 1.5 秒讓使用者看清楚
             setTimeout(() => {
               if (!ttsPlaying.value) ttsFullscreen.value = null;
@@ -2639,6 +2613,7 @@
           stopCurrentAudio();
           ttsPlaying.value = null;
           ttsFullscreen.value = null;
+          nextTick(() => window.lucide && window.lucide.createIcons());
         }
 
         // ===== 天氣 API (Open-Meteo, 免費無需 API Key) =====
@@ -2721,37 +2696,41 @@
           return weather.value.daily.find(d => d.date === dateStr) || null;
         }
 
-        // NEXT STOP: 計算下一個行程
+        // NEXT STOP: 計算下一個行程（依據選中日期）
         const nextStop = computed(() => {
           const now = new Date();
           const todayIso = formatISO(now);
           const currentTime = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-          
-          // 找今天尚未到的行程
-          const upcoming = plans.value
-            .filter(p => p.date === todayIso && p.time > currentTime)
+          const selected = selectedDate.value;
+
+          // 如果選中的是今天，按時間過濾尚未到的行程
+          if (selected === todayIso) {
+            const upcoming = plans.value
+              .filter(p => p.date === todayIso && p.time > currentTime)
+              .sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
+            return upcoming.length > 0 ? upcoming[0] : null;
+          }
+
+          // 選中的是其他天：顯示該日第一個行程
+          const dayPlans = plans.value
+            .filter(p => p.date === selected)
             .sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
-          
-          if (upcoming.length > 0) return upcoming[0];
-          
-          // 如果今天沒有了，找最近未來日期的第一個行程
-          const futurePlans = plans.value
-            .filter(p => p.date > todayIso)
-            .sort((a, b) => a.date === b.date ? String(a.time || '').localeCompare(String(b.time || '')) : a.date.localeCompare(b.date));
-          
-          return futurePlans.length > 0 ? futurePlans[0] : null;
+          return dayPlans.length > 0 ? dayPlans[0] : null;
         });
 
-        // 今日剩餘行程數（含 nextStop）
-        // 開發/預覽模式：如果今天沒有行程，就用選中日期的全部行程數量作為 fallback
+        // 選中日期剩餘行程數（含 nextStop）
         const remainingStops = computed(() => {
           const now = new Date();
           const todayIso = formatISO(now);
           const currentTime = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-          const todayRemaining = plans.value.filter(p => p.date === todayIso && p.time > currentTime).length;
-          if (todayRemaining > 0) return todayRemaining;
-          // fallback: 顯示選中日期的總行程數，方便非當日預覽
-          return plans.value.filter(p => p.date === selectedDate.value).length;
+          const selected = selectedDate.value;
+
+          // 選中的是今天：只算時間尚未到的行程
+          if (selected === todayIso) {
+            return plans.value.filter(p => p.date === todayIso && p.time > currentTime).length;
+          }
+          // 其他天：顯示該日全部行程數
+          return plans.value.filter(p => p.date === selected).length;
         });
 
         // 當前選中日期的天氣
