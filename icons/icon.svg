@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="0" fill="#69a494"/>
+  <circle cx="360" cy="150" r="130" fill="rgba(255,255,255,0.12)"/>
+  <circle cx="120" cy="420" r="90" fill="rgba(255,255,255,0.08)"/>
+  <text x="256" y="230" text-anchor="middle" font-family="-apple-system, sans-serif" font-weight="bold" font-size="88" fill="#fff">HAMKKE</text>
+  <text x="256" y="320" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="42" fill="rgba(255,255,255,0.85)">帶你走走</text>
+</svg>

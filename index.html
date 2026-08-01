@@ -4,48 +4,37 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#69a494">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="HAMKKE">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <title>首爾散步計畫｜HAMKKE</title>
 
-  <!-- Vue 3、Tailwind CSS、Lucide Icons -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Tailwind CSS (pre-compiled) -->
+  <link rel="stylesheet" href="style.css">
+  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=optional" rel="stylesheet">
+  <!-- Vue 3、Lucide Icons、工具庫 -->
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"></script>
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            ink: '#40514d',
-            fog: '#fbfcf9',
-            sage: '#a9d4c6',
-            sageDeep: '#69a494',
-            mint: '#e7f5ef',
-            sun: '#f8d98c',
-            line: '#eaf0ec'
-          },
-          fontFamily: {
-            sans: ['DM Sans', 'Noto Sans TC', 'sans-serif']
-          },
-          boxShadow: {
-            card: '0 12px 30px rgba(74, 107, 98, 0.07)',
-            float: '0 18px 45px rgba(74, 107, 98, 0.11)'
-          }
-        }
-      }
-    };
-  </script>
+  <script src="https://unpkg.com/lz-string@1.5.0/libs/lz-string.min.js"></script>
+  <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <!-- Firebase SDK (compat mode for CDN usage) -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <!-- HAMKKE Firebase Sync Module -->
+  <script src="firebase.js"></script>
 
   <style>
     [v-cloak] { display: none !important; }
     * { -webkit-tap-highlight-color: transparent; }
-    html { background: #f2f7f4; }
+    html { background: #f2f7f4; touch-action: manipulation; }
     body {
       margin: 0; min-height: 100vh; color: #40514d;
       overscroll-behavior-y: contain;
@@ -125,7 +114,7 @@
 
 <body>
   <div id="app" v-cloak class="app-shell" :class="['font-' + fontSize]">
-    <main class="safe-bottom flex-1 overflow-y-auto">
+    <main class="safe-bottom flex-1 overflow-y-auto" @touchstart="handleSwipeStart" @touchmove="handleSwipeMove" @touchend="handleSwipeEnd">
       
       <!-- 主視覺 Header (MAEMORY 風格) -->
       <header class="px-5 pt-5 pb-3">
@@ -133,12 +122,15 @@
         <div class="flex items-center justify-between mb-4">
           <div class="min-w-0 flex-1">
             <p class="text-[11px] font-bold tracking-[.18em] text-sageDeep uppercase">{{ trip.title }}</p>
-            <p class="mt-0.5 text-[10px] text-ink/45 font-semibold">HAMKKE · 帶你走走</p>
+            <p class="mt-0.5 text-[10px] text-ink/45 font-semibold">HAMKKE · 帶你走走 <span class="text-ink/30">v0.2</span>
+              <span v-if="syncStatus === 'synced'" class="text-sageDeep ml-1">☁️</span>
+              <span v-else-if="syncStatus === 'syncing'" class="text-ink/30 ml-1">⏳</span>
+            </p>
           </div>
           <button @click="openTripSettings" class="ml-2 w-10 h-10 rounded-2xl bg-white shadow-card grid place-items-center text-sageDeep" aria-label="旅程設定">
             <i data-lucide="settings-2" class="w-[18px] h-[18px]"></i>
           </button>
-          <button @click="openShareModal" class="ml-2 w-10 h-10 rounded-2xl bg-white shadow-card grid place-items-center text-[#7b6aa6]" aria-label="分享與共編">
+          <button @click="openModal('share')" class="ml-2 w-10 h-10 rounded-2xl bg-white shadow-card grid place-items-center text-[#7b6aa6]" aria-label="分享與共編">
             <i data-lucide="share-2" class="w-[18px] h-[18px]"></i>
           </button>
           <button @click="openModal('font')" class="ml-2 w-10 h-10 rounded-2xl bg-white shadow-card grid place-items-center text-sageDeep font-bold text-xs shadow-sm" aria-label="字體大小">
@@ -167,6 +159,9 @@
               </div>
               <div v-else-if="weather.loading" class="text-right">
                 <p class="text-[10px] text-ink/40 font-semibold">天氣載入中…</p>
+              </div>
+              <div v-else class="text-right">
+                <p class="text-[10px] text-ink/40 font-semibold">預報尚未開放</p>
               </div>
             </div>
 
@@ -203,8 +198,8 @@
                   <button @click="openNavigation(nextStop)" class="h-9 px-3 rounded-xl bg-white text-sageDeep text-[11px] font-bold shadow-sm flex items-center gap-1">
                     <i data-lucide="navigation" class="w-3.5 h-3.5"></i>導航
                   </button>
-                  <button v-if="safeContacts.hotels && safeContacts.hotels.length" @click="openNavigation({ title: safeContacts.hotels[0].krName, location: safeContacts.hotels[0].address, transport: 'taxi' })" class="h-9 px-3 rounded-xl bg-sageDeep text-white text-[11px] font-bold shadow-sm flex items-center gap-1">
-                    <i data-lucide="home" class="w-3.5 h-3.5"></i>回飯店
+                  <button v-if="todayHotel" @click="openNavigation({ title: todayHotel.krName, location: todayHotel.address, locationKr: todayHotel.krName, transport: 'taxi' })" class="h-9 px-3 rounded-xl bg-sageDeep text-white text-[11px] font-bold shadow-sm flex items-center gap-1">
+                    <i data-lucide="home" class="w-3.5 h-3.5"></i>回住宿
                   </button>
                 </div>
               </div>
@@ -236,64 +231,14 @@
       </div>
 
       <transition name="tab-fade" mode="out-in">
-        
-        <!-- ==================== 1. 今日 (Today) ==================== -->
-        <section v-if="activeTab === 'today'" key="today" class="px-5 mt-3 space-y-5 pb-10">
-          <div class="flex items-center justify-between border-b border-line pb-3">
-            <div class="flex items-center gap-1.5 font-bold text-ink text-lg tracking-wider">
-              <i data-lucide="compass" class="h-5 w-5 text-sageDeep"></i>
-              SEOUL 今日總覽
-            </div>
-            <div v-if="todayWeather" class="flex items-center gap-1 font-bold text-ink/70">
-              <span class="text-base">{{ todayWeather.emoji }}</span>
-              <span class="text-sm">{{ todayWeather.temp || todayWeather.maxTemp }}°C</span>
-            </div>
-          </div>
+        <section v-if="activeTab === 'today'" key="today" class="px-5 mt-3 space-y-5 pb-10" :style="swipeStyle">
 
-          <!-- 即時天氣卡片 (API 連動) -->
-          <div class="rounded-[24px] p-4 bg-gradient-to-br from-mint to-white border border-white shadow-card space-y-3">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-3">
-                <div class="w-12 h-12 rounded-2xl bg-white/85 grid place-items-center text-2xl shadow-sm">
-                  {{ todayWeather ? todayWeather.emoji : '�️' }}
-                </div>
-                <div>
-                  <p class="text-[10px] font-bold text-sageDeep uppercase">OPEN-METEO 即時天氣</p>
-                  <p v-if="todayWeather" class="mt-0.5 text-base font-bold text-ink">
-                    首爾 {{ todayWeather.temp || todayWeather.maxTemp }}°C {{ todayWeather.text }}
-                  </p>
-                  <p v-else-if="weather.loading" class="mt-0.5 text-sm font-bold text-ink/50">載入中…</p>
-                  <p v-else class="mt-0.5 text-sm font-bold text-ink/50">天氣資料暫時無法取得</p>
-                </div>
-              </div>
-              <div class="text-right">
-                <p class="text-[10px] font-bold text-ink/45 uppercase tracking-wider">目前花費</p>
-                <p class="mt-0.5 text-base font-bold text-sageDeep">{{ money(totalSpentTwd) }}</p>
-              </div>
-            </div>
-            <!-- 未來幾天天氣預覽 -->
-            <div v-if="weather.daily.length" class="pt-3 border-t border-line">
-              <div class="flex gap-3 overflow-x-auto hide-scrollbar pb-1">
-                <div v-for="(day, idx) in weather.daily.slice(0, 5)" :key="day.date" class="flex flex-col items-center gap-1 min-w-[48px] shrink-0">
-                  <span class="text-[9px] font-bold text-ink/40">{{ idx === 0 ? '今天' : shortDate(day.date) }}</span>
-                  <span class="text-base">{{ day.emoji }}</span>
-                  <span class="text-[10px] font-bold text-ink">{{ day.maxTemp }}°</span>
-                  <span class="text-[9px] text-ink/40">{{ day.minTemp }}°</span>
-                </div>
-              </div>
-            </div>
-            <div v-else class="pt-3 border-t border-line text-xs font-semibold text-ink/80 flex items-start gap-2">
-              <i data-lucide="shirt" class="w-4 h-4 text-sageDeep shrink-0 mt-0.5"></i>
-              <span><strong>穿搭推薦：</strong>8月中旬首爾悶熱，建議穿著透氣輕便短袖與薄外套，並隨身攜帶雨具。</span>
-            </div>
-          </div>
-
-          <!-- 出遊安心卡 - 需要安全碼解鎖 -->
-          <div v-if="!safeUnlocked" class="grid grid-cols-2 gap-3">
+          <!-- 出遊安心卡 - 按鈕永遠顯示，點擊後輸入安全碼以 dialog 顯示 -->
+          <div class="grid grid-cols-2 gap-3">
             <button @click="openSafeCode('hotel')" class="rounded-[24px] bg-white border border-line p-5 shadow-card text-left">
               <span class="grid h-10 w-10 place-items-center rounded-2xl bg-[#fef0ee] text-[#d4836b] mb-3"><i data-lucide="home" class="w-5 h-5"></i></span>
-              <h3 class="font-bold text-ink text-sm">安心回飯店</h3>
-              <p class="mt-1 text-[11px] text-ink/50 font-medium">顯示韓文地址與電話</p>
+              <h3 class="font-bold text-ink text-sm">今日住宿</h3>
+              <p class="mt-1 text-[11px] text-ink/50 font-medium">顯示韓文地址與連結</p>
             </button>
             <button @click="openSafeCode('emergency')" class="rounded-[24px] bg-white border border-line p-5 shadow-card text-left">
               <span class="grid h-10 w-10 place-items-center rounded-2xl bg-[#fff5dc] text-[#c9a635] mb-3"><i data-lucide="shield-check" class="w-5 h-5"></i></span>
@@ -301,45 +246,6 @@
               <p class="mt-1 text-[11px] text-ink/50 font-medium">緊急聯絡與重要資訊</p>
             </button>
           </div>
-
-          <template v-if="safeUnlocked">
-          <article class="rounded-[24px] bg-white border border-line p-5 shadow-card">
-            <h2 class="flex items-center gap-2 text-lg font-bold text-ink mb-4">
-              <span class="grid h-8 w-8 place-items-center rounded-xl bg-mint text-sageDeep"><i data-lucide="shield-check" class="w-4.5 h-4.5"></i></span>
-              出遊安心卡
-            </h2>
-            <div class="space-y-3">
-              <div class="rounded-[20px] bg-mint/40 p-4 border border-line">
-                <p class="text-xs font-bold tracking-wider text-sageDeep mb-2 uppercase">救助相關專線</p>
-                <ul class="space-y-2 text-sm text-ink font-semibold">
-                  <li class="flex justify-between items-center" v-for="c in safeContacts.embassy" :key="c.label">
-                    <span>{{ c.label }}</span>
-                    <a :href="'tel:' + c.phone" class="text-sageDeep underline">{{ c.phone }}</a>
-                  </li>
-                </ul>
-              </div>
-              <div class="grid grid-cols-2 gap-3">
-                <div class="rounded-[20px] bg-fog p-3.5 border border-line">
-                  <p class="text-xs font-bold tracking-wider text-ink/50 mb-2">當地緊急電話</p>
-                  <ul class="space-y-1.5 text-sm text-ink font-semibold">
-                    <li>報警：<a href="tel:112" class="underline">112</a></li>
-                    <li>網路犯罪：<a href="tel:118" class="underline">118</a></li>
-                    <li>火災急救：<a href="tel:119" class="underline">119</a></li>
-                  </ul>
-                </div>
-                <div class="rounded-[20px] bg-fog p-3.5 border border-line">
-                  <p class="text-xs font-bold tracking-wider text-ink/50 mb-2">緊急聯絡人</p>
-                  <ul class="space-y-2 text-sm text-ink font-semibold">
-                    <li v-for="(c, idx) in safeContacts.emergency" :key="c.name" :class="idx > 0 ? 'pt-1.5 border-t border-line' : ''">
-                      {{ c.name }}<br><a :href="'tel:' + c.phone" class="text-sageDeep underline text-xs">{{ c.phone }}</a>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </article>
-          </template>
-          </article>
 
           <!-- 今日行程摘要 (永遠只顯示今日資料 todayPlans) -->
           <section>
@@ -363,16 +269,14 @@
                 <div class="min-w-0 flex-1">
                   <h3 class="font-bold text-ink text-sm truncate">{{ item.title }}</h3>
                   <p class="text-xs text-ink/50 mt-1 flex items-center">
-                    <i data-lucide="map-pin" class="w-3.5 h-3.5 mr-1 text-sageDeep shrink-0"></i> {{ item.location || '首爾市區' }}
+                    <i data-lucide="map-pin" class="w-3.5 h-3.5 mr-1 text-sageDeep shrink-0"></i> {{ item.location || item.locationKr || '首爾市區' }}
                   </p>
                 </div>
               </article>
             </div>
           </section>
         </section>
-
-        <!-- ==================== 2. 行程 (Schedule) ==================== -->
-        <section v-else-if="activeTab === 'schedule'" key="schedule" class="px-5 mt-3 space-y-4 pb-10">
+        <section v-else-if="activeTab === 'schedule'" key="schedule" class="px-5 mt-3 space-y-4 pb-10" :style="swipeStyle">
           <div class="flex items-center justify-between">
             <div>
               <p class="text-xs text-ink/45 font-bold uppercase">{{ selectedDayName }}</p>
@@ -390,69 +294,6 @@
             </div>
           </div>
 
-          <!-- 安心回飯店 + 出遊安心卡 - 需要安全碼解鎖 -->
-          <div v-if="!safeUnlocked" class="grid grid-cols-2 gap-3">
-            <button @click="openSafeCode('hotel')" class="rounded-[24px] bg-white border border-line p-5 shadow-card text-left">
-              <span class="grid h-10 w-10 place-items-center rounded-2xl bg-[#fef0ee] text-[#d4836b] mb-3"><i data-lucide="home" class="w-5 h-5"></i></span>
-              <h3 class="font-bold text-ink text-sm">安心回飯店</h3>
-              <p class="mt-1 text-[11px] text-ink/50 font-medium">顯示韓文地址與電話</p>
-            </button>
-            <button @click="openSafeCode('emergency')" class="rounded-[24px] bg-white border border-line p-5 shadow-card text-left">
-              <span class="grid h-10 w-10 place-items-center rounded-2xl bg-[#fff5dc] text-[#c9a635] mb-3"><i data-lucide="shield-check" class="w-5 h-5"></i></span>
-              <h3 class="font-bold text-ink text-sm">出遊安心卡</h3>
-              <p class="mt-1 text-[11px] text-ink/50 font-medium">緊急聯絡與重要資訊</p>
-            </button>
-          </div>
-
-          <template v-if="safeUnlocked">
-          <!-- 安心回飯店卡片 -->
-          <article class="rounded-[24px] bg-white border border-line p-5 shadow-card">
-            <h2 class="flex items-center gap-2 text-lg font-bold text-ink mb-3">
-              <span class="grid h-8 w-8 place-items-center rounded-xl bg-mint text-sageDeep"><i data-lucide="home" class="w-4.5 h-4.5"></i></span>
-              安心回飯店 (住宿資訊)
-            </h2>
-            <div class="space-y-3 text-xs">
-              <div v-for="hotel in safeContacts.hotels" :key="hotel.name" class="p-3.5 rounded-2xl bg-fog border border-line space-y-1">
-                <a :href="hotel.url" target="_blank" rel="noopener" class="font-bold text-sm text-sageDeep underline decoration-sage underline-offset-2 block">
-                  {{ hotel.name }} <i data-lucide="external-link" class="w-3 h-3 inline-block"></i>
-                </a>
-                <p class="font-semibold text-ink/80">{{ hotel.krName }}</p>
-                <p class="text-ink/60 font-medium">📍 {{ hotel.address }}</p>
-              </div>
-            </div>
-          </article>
-
-          <!-- 出遊安心卡 -->
-          <article class="rounded-[24px] bg-white border border-line p-5 shadow-card">
-            <h2 class="flex items-center gap-2 text-lg font-bold text-ink mb-3">
-              <span class="grid h-8 w-8 place-items-center rounded-xl bg-mint text-sageDeep"><i data-lucide="shield-check" class="w-4.5 h-4.5"></i></span>
-              出遊安心卡
-            </h2>
-            <div class="space-y-3 text-xs">
-              <div class="rounded-[20px] bg-mint/40 p-3.5 border border-line">
-                <p class="font-bold text-sageDeep mb-1.5 uppercase tracking-wider">救助相關專線</p>
-                <ul class="space-y-1 font-semibold text-ink">
-                  <li v-for="c in safeContacts.embassy" :key="c.label">{{ c.label }}：<a :href="'tel:' + c.phone" class="text-sageDeep underline">{{ c.phone }}</a></li>
-                </ul>
-              </div>
-              <div class="grid grid-cols-2 gap-2">
-                <div class="rounded-xl bg-fog p-3 border border-line">
-                  <p class="font-bold text-ink/50 mb-1">韓國當地緊急</p>
-                  <p>報警：<a href="tel:112" class="underline">112</a></p>
-                  <p>網路犯罪：<a href="tel:118" class="underline">118</a></p>
-                  <p>火災急救：<a href="tel:119" class="underline">119</a></p>
-                </div>
-                <div class="rounded-xl bg-fog p-3 border border-line">
-                  <p class="font-bold text-ink/50 mb-1">緊急聯絡人</p>
-                  <p v-for="(c, idx) in safeContacts.emergency" :key="c.name" :class="idx > 0 ? 'mt-1 pt-1 border-t border-line' : ''">
-                    {{ c.name }}<br><a :href="'tel:' + c.phone" class="text-sageDeep underline">{{ c.phone }}</a>
-                  </p>
-                </div>
-              </div>
-            </div>
-          </article>
-          </template>
-
           <div v-if="selectedPlans.length" class="space-y-3">
             <template v-for="(plan, index) in selectedPlans" :key="plan.id">
               <div v-if="index > 0" class="relative ml-4 pl-8 py-1.5">
@@ -469,13 +310,23 @@
                       <span class="min-w-0 text-[10px] font-bold text-ink/68">{{ transportLabel(plan.transport) }} · {{ selectedPlans[index - 1].title }} → {{ plan.title }}</span>
                     </span>
                     <span class="shrink-0 text-[9px] font-bold text-[#715f99] flex items-center gap-0.5">
-                      {{ plan.transport === 'subway' ? '韓巢地鐵' : 'Naver Maps' }}<i data-lucide="arrow-up-right" class="w-2.5 h-2.5"></i>
+                      Naver Map<i data-lucide="arrow-up-right" class="w-2.5 h-2.5"></i>
                     </span>
                   </span>
                 </button>
               </div>
 
-              <article class="paper-card rounded-[22px] p-4 relative shadow-card">
+              <article 
+                class="paper-card rounded-[22px] p-4 relative shadow-card transition-transform"
+                :class="{ 'opacity-50 scale-95': dragState.dragging && dragState.dragIndex === index, 'border-2 border-sageDeep': dragState.overIndex === index && dragState.dragIndex !== index }"
+                draggable="true"
+                @dragstart="handleDragStart(index, $event)"
+                @dragover.prevent="handleDragOver(index, $event)"
+                @dragend="handleDragEnd"
+                @touchstart="handleTouchStart(index, $event)"
+                @touchmove.prevent="handleTouchMove($event)"
+                @touchend="handleTouchEnd"
+              >
                 <div class="flex items-start justify-between gap-2">
                   <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2">
@@ -486,15 +337,18 @@
                       {{ plan.title }} <i data-lucide="external-link" class="w-3.5 h-3.5 inline-block text-sageDeep"></i>
                     </a>
                     <h3 v-else class="mt-1.5 font-bold text-base text-ink">{{ plan.title }}</h3>
-                    <p class="mt-1 text-xs text-ink/50 flex items-center gap-1">
-                      <i data-lucide="map-pin" class="w-3.5 h-3.5 text-sageDeep shrink-0"></i> {{ plan.location || '尚未填寫地點' }}
+                    <p v-if="plan.location || plan.locationKr" class="mt-1 text-xs text-ink/50 flex items-center gap-1">
+                      <i data-lucide="map-pin" class="w-3.5 h-3.5 text-sageDeep shrink-0"></i> 
+                      {{ plan.location }}<span v-if="plan.location && plan.locationKr"> · </span>{{ plan.locationKr }}
+                    </p>
+                    <p v-else class="mt-1 text-xs text-ink/50 flex items-center gap-1">
+                      <i data-lucide="map-pin" class="w-3.5 h-3.5 text-sageDeep shrink-0"></i> 尚未填寫地點
                     </p>
                   </div>
                   <div class="flex items-center gap-1 shrink-0">
-                    <div class="flex flex-col">
-                      <button @click="moveSchedule(index, -1)" :disabled="index === 0" class="w-11 h-11 rounded bg-fog grid place-items-center text-ink/40 disabled:opacity-20"><i data-lucide="chevron-up" class="w-3.5 h-3.5"></i></button>
-                      <button @click="moveSchedule(index, 1)" :disabled="index === selectedPlans.length - 1" class="w-11 h-11 rounded bg-fog grid place-items-center text-ink/40 disabled:opacity-20"><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i></button>
-                    </div>
+                    <span class="w-8 h-10 rounded-xl bg-fog grid place-items-center text-ink/30 cursor-grab active:cursor-grabbing">
+                      <i data-lucide="grip-vertical" class="w-4 h-4"></i>
+                    </span>
                     <button @click="openPlanForm(plan)" class="w-8 h-10 rounded-xl bg-fog grid place-items-center text-ink/50 hover:text-sageDeep"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
                   </div>
                 </div>
@@ -502,7 +356,7 @@
                 
                 <div class="mt-3 pt-3 border-t border-line flex items-center justify-end">
                   <button class="text-xs font-bold text-sageDeep bg-mint px-3 py-1.5 rounded-xl flex items-center gap-1.5 hover:bg-sageDeep hover:text-white transition shadow-2xs" @click="openNavigation(plan)">
-                    <i data-lucide="navigation" class="w-3 h-3"></i> 導航 ({{ plan.transport === 'subway' ? '韓巢' : 'Naver' }})
+                    <i data-lucide="navigation" class="w-3 h-3"></i> Naver Map 導航
                   </button>
                 </div>
               </article>
@@ -512,17 +366,20 @@
             <p class="text-sm font-bold text-ink">這天還沒有行程</p>
           </div>
         </section>
-
-        <!-- ==================== 3. 記帳 (Expense) ==================== -->
-        <section v-else-if="activeTab === 'expense'" key="expense" class="px-5 mt-2 space-y-4 pb-10">
+        <section v-else-if="activeTab === 'expense'" key="expense" class="px-5 mt-2 space-y-4 pb-10" :style="swipeStyle">
           <div class="flex items-end justify-between">
             <div>
               <p class="text-xs text-ink/45 uppercase font-bold tracking-wider">Trip Wallet</p>
               <h2 class="text-xl font-bold tracking-[-.03em] text-ink">旅行記帳與分帳</h2>
             </div>
-            <button @click="openExpenseForm()" class="h-10 px-4 rounded-2xl bg-sageDeep text-white text-xs font-semibold flex items-center gap-1.5 shadow-card">
-              <i data-lucide="plus" class="w-4 h-4"></i>記一筆
-            </button>
+            <div class="flex items-center gap-2">
+              <button @click="openExpenseForm(null, true)" class="h-10 px-3 rounded-2xl bg-white border border-line text-sageDeep text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+                <i data-lucide="zap" class="w-3.5 h-3.5"></i>速記
+              </button>
+              <button @click="openExpenseForm(null, false)" class="h-10 px-4 rounded-2xl bg-sageDeep text-white text-xs font-semibold flex items-center gap-1.5 shadow-card">
+                <i data-lucide="plus" class="w-4 h-4"></i>記一筆
+              </button>
+            </div>
           </div>
 
           <div class="grid grid-cols-2 gap-3">
@@ -531,10 +388,11 @@
               <p class="mt-2 text-xl font-bold">{{ money(totalSpentTwd) }}</p>
               <p class="mt-1 text-[10px] text-ink/40 font-semibold">共 {{ expenses.length }} 筆</p>
             </div>
-            <div class="rounded-[22px] bg-white p-4 shadow-card border border-line flex flex-col justify-center">
-              <p class="text-[10px] text-sageDeep font-bold">分帳結算狀態</p>
+            <button @click="openModal('settlement')" class="rounded-[22px] bg-white p-4 shadow-card border border-line flex flex-col justify-center text-left hover:border-sageDeep transition">
+              <p class="text-[10px] text-sageDeep font-bold">分帳結算</p>
               <p class="mt-1 text-xs font-bold text-ink leading-relaxed whitespace-pre-line">{{ settlementMessage }}</p>
-            </div>
+              <p class="mt-1.5 text-[9px] text-sageDeep font-bold flex items-center gap-0.5">查看明細 <i data-lucide="chevron-right" class="w-3 h-3"></i></p>
+            </button>
           </div>
 
           <div class="flex items-center justify-between pt-2">
@@ -554,7 +412,7 @@
             >
               <div class="w-10 h-10 rounded-2xl grid place-items-center text-base shrink-0 bg-mint text-sageDeep">{{ categoryStyle(expense.category).icon }}</div>
               <div class="min-w-0 flex-1">
-                <p class="font-bold text-sm truncate text-ink">{{ expense.title }}</p>
+                <p class="font-bold text-sm truncate text-ink">{{ expense.title || expense.category }}</p>
                 <p class="mt-0.5 text-[10px] text-ink/50 font-semibold">{{ shortDate(expense.date) }} · {{ paymentLabel(expense.payment) }}</p>
               </div>
               <div class="text-right shrink-0">
@@ -564,9 +422,7 @@
           </div>
           <div v-else class="rounded-[22px] border border-dashed border-sage/30 p-7 text-center text-xs text-ink/40">還沒有支出紀錄</div>
         </section>
-
-        <!-- ==================== 4. 韓文 (Language) ==================== -->
-        <section v-else-if="activeTab === 'language'" key="language" class="px-5 mt-2 space-y-4 pb-10">
+        <section v-else-if="activeTab === 'language'" key="language" class="px-5 mt-2 space-y-4 pb-10" :style="swipeStyle">
           <div class="flex items-end justify-between">
             <div>
               <p class="text-xs text-ink/45 uppercase font-bold tracking-wider">Korean Class</p>
@@ -604,8 +460,8 @@
       </transition>
     </main>
 
-    <!-- B07: 底部導覽列改為 sticky 定位，限制在 app-shell 容器內 -->
-    <nav class="sticky bottom-0 w-full glass border-t border-white/80 z-[500]" :style="{ paddingBottom: 'env(safe-area-inset-bottom)' }" aria-label="主要選單">
+    <!-- B07: 底部導覽列改為 fixed 定位，在手機上懸浮於畫面最底部 -->
+    <nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[440px] glass border-t border-white/80 z-[500]" :style="{ paddingBottom: 'env(safe-area-inset-bottom)' }" aria-label="主要選單">
       <div class="h-[78px] px-5 flex items-center justify-between">
         <button v-for="tab in tabs" :key="tab.value" @click="switchTab(tab.value)" class="relative w-[72px] h-14 rounded-[19px] flex flex-col items-center justify-center gap-1 transition-all" :class="activeTab === tab.value ? 'text-sageDeep bg-mint/70' : 'text-ink/35'">
           <template v-if="tab.value === 'language'">
@@ -625,7 +481,12 @@
         <div class="modal-card w-full max-w-[440px] max-h-[90vh] overflow-y-auto rounded-t-[30px] bg-fog p-5 pb-8 shadow-float" role="dialog" aria-modal="true" aria-label="編輯行程">
           <div class="flex items-center justify-between">
             <h2 class="text-xl font-bold">{{ planForm.id ? '編輯行程' : '新增行程' }}</h2>
-            <button @click="closeModal" class="w-9 h-9 rounded-xl bg-white grid place-items-center"><i data-lucide="x" class="w-4 h-4"></i></button>
+            <div class="flex items-center gap-2">
+              <button v-if="!planForm.id" type="button" @click="planQuickMode = !planQuickMode" class="text-[10px] font-bold px-2.5 py-1 rounded-full border transition" :class="planQuickMode ? 'bg-sageDeep text-white border-sageDeep' : 'bg-white text-ink/50 border-line'">
+                {{ planQuickMode ? '⚡ 快速' : '📝 完整' }}
+              </button>
+              <button @click="closeModal" class="w-9 h-9 rounded-xl bg-white grid place-items-center"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
           </div>
           <form @submit.prevent="savePlan" class="mt-5 space-y-4">
             <div class="grid grid-cols-2 gap-3">
@@ -638,37 +499,44 @@
                 <input v-model="planForm.time" type="time" required class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-3 font-normal">
               </label>
             </div>
-            <label class="block text-xs font-semibold">地名 (行程名稱)
+            <label class="block text-xs font-semibold">行程名稱
               <input v-model.trim="planForm.title" type="text" required placeholder="例如：樂天世界水族館" class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-4 font-normal">
             </label>
-            <!-- B06: 加入地點輸入欄位 -->
-            <label class="block text-xs font-semibold">地點
-              <input v-model.trim="planForm.location" type="text" placeholder="例如：首爾松坡區" class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-4 font-normal">
-            </label>
-            <div class="grid grid-cols-2 gap-3">
-              <label class="text-xs font-semibold">分類
-                <select v-model="planForm.category" class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-3 font-normal">
-                  <option v-for="category in planCategories" :key="category">{{ category }}</option>
-                </select>
+
+            <!-- 快速模式到此為止，完整模式繼續 -->
+            <template v-if="!planQuickMode || planForm.id">
+              <label class="block text-xs font-semibold">中文地名
+                <input v-model.trim="planForm.location" type="text" placeholder="例如：首爾松坡區" class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-4 font-normal">
               </label>
-              <label class="text-xs font-semibold">前往方式 (導航使用)
-                <select v-model="planForm.transport" class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-3 font-normal">
-                  <option value="subway">地鐵 (開啟韓巢)</option>
-                  <option value="taxi">計程車 (開啟Naver)</option>
-                  <option value="walk">步行 (開啟Naver)</option>
-                  <option value="flight">飛行</option>
-                </select>
+              <label class="block text-xs font-semibold">韓文地址 <span class="text-ink/40 font-normal">(方便給計程車司機看)</span>
+                <input v-model.trim="planForm.locationKr" type="text" placeholder="예: 서울특별시 송파구..." class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-4 font-normal">
               </label>
-            </div>
-            <label class="block text-xs font-semibold">網址 (選填，可預覽網頁)
-              <input v-model.trim="planForm.url" type="url" placeholder="例如：https://www.lotteworld.com" class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-4 font-normal">
-            </label>
-            <label class="block text-xs font-semibold">備註
-              <textarea v-model.trim="planForm.note" rows="3" placeholder="營業時間、訂位資訊、想吃的品項…" class="mt-1.5 w-full rounded-2xl bg-white border border-line px-4 py-3 font-normal resize-none"></textarea>
-            </label>
+              <div class="grid grid-cols-2 gap-3">
+                <label class="text-xs font-semibold">分類
+                  <select v-model="planForm.category" class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-3 font-normal">
+                    <option v-for="category in planCategories" :key="category">{{ category }}</option>
+                  </select>
+                </label>
+                <label class="text-xs font-semibold">前往方式
+                  <select v-model="planForm.transport" class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-3 font-normal">
+                    <option value="subway">地鐵</option>
+                    <option value="taxi">計程車</option>
+                    <option value="walk">步行</option>
+                    <option value="flight">飛行</option>
+                  </select>
+                </label>
+              </div>
+              <label class="block text-xs font-semibold">Naver Map 連結 (選填)
+                <input v-model.trim="planForm.url" type="url" placeholder="https://naver.me/..." class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-4 font-normal">
+              </label>
+              <label class="block text-xs font-semibold">備註
+                <textarea v-model.trim="planForm.note" rows="3" placeholder="營業時間、訂位資訊、想吃的品項…" class="mt-1.5 w-full rounded-2xl bg-white border border-line px-4 py-3 font-normal resize-none"></textarea>
+              </label>
+            </template>
+
             <div class="flex gap-3 pt-1">
               <button v-if="planForm.id" type="button" @click="deletePlan" class="h-12 w-12 rounded-2xl border border-red-200 text-red-500 grid place-items-center"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-              <button type="submit" class="h-12 flex-1 rounded-2xl bg-sageDeep text-white font-semibold">儲存行程</button>
+              <button type="submit" class="h-12 flex-1 rounded-2xl bg-sageDeep text-white font-semibold">{{ planQuickMode && !planForm.id ? '快速儲存' : '儲存行程' }}</button>
             </div>
           </form>
         </div>
@@ -681,15 +549,18 @@
         <div class="modal-card w-full max-w-[440px] max-h-[90vh] overflow-y-auto rounded-t-[30px] bg-fog p-5 pb-8 shadow-float" role="dialog" aria-modal="true" aria-label="編輯支出">
           <div class="flex items-center justify-between">
             <h2 class="text-xl font-bold">{{ expenseForm.id ? '編輯支出' : '新增支出' }}</h2>
-            <button @click="closeModal" class="w-9 h-9 rounded-xl bg-white grid place-items-center"><i data-lucide="x" class="w-4 h-4"></i></button>
+            <div class="flex items-center gap-2">
+              <button v-if="!expenseForm.id" type="button" @click="expenseQuickMode = !expenseQuickMode" class="text-[10px] font-bold px-2.5 py-1 rounded-full border transition" :class="expenseQuickMode ? 'bg-sageDeep text-white border-sageDeep' : 'bg-white text-ink/50 border-line'">
+                {{ expenseQuickMode ? '⚡ 速記' : '📝 完整' }}
+              </button>
+              <button @click="closeModal" class="w-9 h-9 rounded-xl bg-white grid place-items-center"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
           </div>
           <form @submit.prevent="saveExpense" class="mt-5 space-y-4">
-            <label class="block text-xs font-semibold">支出項目
-              <input v-model.trim="expenseForm.title" type="text" required placeholder="例如：T-money 儲值" class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-4 font-normal">
-            </label>
+            <!-- 速記模式：金額 + 幣別 + 分類 + 付款人 -->
             <div class="grid grid-cols-[1fr_100px] gap-3">
-              <label class="text-xs font-semibold">總金額
-                <input v-model.number="expenseForm.amount" type="number" min="0" step="0.01" required class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-4 font-normal">
+              <label class="text-xs font-semibold">金額
+                <input v-model.number="expenseForm.amount" type="number" min="0" step="0.01" required class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-4 font-normal" placeholder="例如：15000">
               </label>
               <label class="text-xs font-semibold">幣別
                 <select v-model="expenseForm.currency" class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-3 font-normal">
@@ -697,64 +568,78 @@
                 </select>
               </label>
             </div>
-            
             <div class="grid grid-cols-2 gap-3">
               <label class="text-xs font-semibold">分類
                 <select v-model="expenseForm.category" class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-3 font-normal">
                   <option v-for="category in expenseCategories" :key="category">{{ category }}</option>
                 </select>
               </label>
-              <label class="text-xs font-semibold">付款方式
-                <select v-model="expenseForm.payment" class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-3 font-normal">
-                  <option value="cash">現金</option>
-                  <option value="credit">信用卡</option>
-                  <option value="electronic">電子票證</option>
+              <label class="text-xs font-semibold">付款人
+                <select v-model="expenseForm.payers[0].name" class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-3 font-normal">
+                  <option v-for="m in trip.memberNames" :key="m">{{m}}</option>
                 </select>
               </label>
             </div>
 
-            <div class="grid grid-cols-2 gap-3">
-              <label class="text-xs font-semibold">日期
-                <input v-model="expenseForm.date" type="date" required class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-3 font-normal">
+            <!-- 完整模式：額外欄位 -->
+            <template v-if="!expenseQuickMode || expenseForm.id">
+              <label class="block text-xs font-semibold">支出項目
+                <input v-model.trim="expenseForm.title" type="text" placeholder="例如：T-money 儲值" class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-4 font-normal">
               </label>
-              <label class="text-xs font-semibold">參考匯率
+              <div class="grid grid-cols-2 gap-3">
+                <label class="text-xs font-semibold">付款方式
+                  <select v-model="expenseForm.payment" class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-3 font-normal">
+                    <option value="cash">現金</option>
+                    <option value="credit">信用卡</option>
+                    <option value="electronic">電子票證</option>
+                  </select>
+                </label>
+                <label class="text-xs font-semibold">日期
+                  <input v-model="expenseForm.date" type="date" required class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-3 font-normal">
+                </label>
+              </div>
+
+              <!-- #10: 匯率可編輯 -->
+              <label class="block text-xs font-semibold">參考匯率 <span class="text-ink/40 font-normal">(可手動修改)</span>
                 <input v-model.number="expenseForm.rate" type="number" min="0" step="0.0001" required class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-3 font-normal">
               </label>
-            </div>
 
-            <!-- 進階付款與分帳區域 -->
-            <div class="rounded-2xl border border-line p-4 bg-white space-y-4">
-              <div>
-                <label class="block text-xs font-bold text-sageDeep mb-2">付款人 (誰先付錢的？)</label>
-                <div v-for="(payer, idx) in (expenseForm.payers || [])" :key="'p'+idx" class="flex gap-2 mt-1">
-                  <select v-model="payer.name" class="w-1/2 h-10 rounded-xl bg-fog border border-line px-2 text-xs">
-                    <option v-for="m in trip.memberNames" :key="m">{{m}}</option>
+              <!-- #7: 進階付款與分帳區域 -->
+              <div class="rounded-2xl border border-line p-4 bg-white space-y-4">
+                <div>
+                  <label class="block text-xs font-bold text-sageDeep mb-2">付款人 (誰先付錢的？)</label>
+                  <div v-for="(payer, idx) in (expenseForm.payers || [])" :key="'p'+idx" class="flex gap-2 mt-1">
+                    <select v-model="payer.name" class="w-1/2 h-10 rounded-xl bg-fog border border-line px-2 text-xs">
+                      <option v-for="m in trip.memberNames" :key="m">{{m}}</option>
+                    </select>
+                    <input v-model.number="payer.amount" type="number" class="w-1/2 h-10 rounded-xl bg-fog border border-line px-2 text-xs" :placeholder="'金額 (' + expenseForm.currency + ')'">
+                    <button type="button" @click="expenseForm.payers.splice(idx, 1)" class="w-8 h-10 flex items-center justify-center text-red-400 font-bold" v-if="(expenseForm.payers || []).length > 1">X</button>
+                  </div>
+                  <!-- #7: 剩餘金額提示 -->
+                  <p v-if="payerRemainingHint && (expenseForm.payers || []).length > 1" class="mt-1.5 text-[10px] font-semibold" :class="payerRemainingHint.startsWith('✓') ? 'text-sageDeep' : payerRemainingHint.startsWith('⚠') ? 'text-red-400' : 'text-ink/50'">{{ payerRemainingHint }}</p>
+                  <button type="button" @click="(expenseForm.payers = expenseForm.payers || []).push({name: trip.memberNames[1] || trip.memberNames[0], amount: ''})" class="mt-2 text-[10px] font-bold text-sageDeep flex items-center gap-1"><i data-lucide="plus" class="w-3 h-3"></i>新增多位付款人</button>
+                </div>
+
+                <div class="border-t border-line pt-3 mt-2">
+                  <label class="block text-xs font-bold text-sageDeep mb-2">分帳方式 (這筆錢是誰該付的？)</label>
+                  <select v-model="expenseForm.splitType" class="w-full h-10 rounded-xl bg-fog border border-line px-2 text-xs mb-2">
+                    <option value="equal">所有人平分</option>
+                    <option value="exact">自行輸入應付金額</option>
+                    <option value="ratio">依比例分攤</option>
                   </select>
-                  <input v-model.number="payer.amount" type="number" class="w-1/2 h-10 rounded-xl bg-fog border border-line px-2 text-xs" placeholder="輸入金額">
-                  <button type="button" @click="expenseForm.payers.splice(idx, 1)" class="w-8 h-10 flex items-center justify-center text-red-400 font-bold" v-if="(expenseForm.payers || []).length > 1">X</button>
-                </div>
-                <button type="button" @click="(expenseForm.payers = expenseForm.payers || []).push({name: trip.memberNames[0], amount: 0})" class="mt-2 text-[10px] font-bold text-sageDeep flex items-center gap-1"><i data-lucide="plus" class="w-3 h-3"></i>新增多位付款人</button>
-              </div>
-
-              <div class="border-t border-line pt-3 mt-2">
-                <label class="block text-xs font-bold text-sageDeep mb-2">分帳方式 (這筆錢是誰該付的？)</label>
-                <select v-model="expenseForm.splitType" class="w-full h-10 rounded-xl bg-fog border border-line px-2 text-xs mb-2">
-                  <option value="equal">所有人平分</option>
-                  <option value="exact">自行輸入應付金額</option>
-                  <option value="ratio">依比例分攤</option>
-                </select>
-                <div v-for="(split, idx) in (expenseForm.splits || [])" :key="'s'+idx" class="flex gap-2 mt-1 items-center">
-                  <span class="w-1/3 text-xs font-semibold pl-1">{{ split.name }}</span>
-                  <input v-if="expenseForm.splitType === 'exact'" v-model.number="split.value" type="number" class="w-2/3 h-10 rounded-xl bg-fog border border-line px-2 text-xs" placeholder="輸入該付金額">
-                  <input v-else-if="expenseForm.splitType === 'ratio'" v-model.number="split.value" type="number" class="w-2/3 h-10 rounded-xl bg-fog border border-line px-2 text-xs" placeholder="輸入比例 (例如 1)">
-                  <span v-else class="text-xs text-ink/50 w-2/3 pl-2">系統自動平分</span>
+                  <div v-for="(split, idx) in (expenseForm.splits || [])" :key="'s'+idx" class="flex gap-2 mt-1 items-center">
+                    <span class="w-1/3 text-xs font-semibold pl-1">{{ split.name }}</span>
+                    <input v-if="expenseForm.splitType === 'exact'" v-model.number="split.value" type="number" class="w-2/3 h-10 rounded-xl bg-fog border border-line px-2 text-xs" :placeholder="'應付金額 (' + expenseForm.currency + ')'">
+                    <input v-else-if="expenseForm.splitType === 'ratio'" v-model.number="split.value" type="number" class="w-2/3 h-10 rounded-xl bg-fog border border-line px-2 text-xs" placeholder="輸入比例 (例如 1)">
+                    <span v-else class="text-xs text-ink/50 w-2/3 pl-2">系統自動平分</span>
+                  </div>
                 </div>
               </div>
-            </div>
+            </template>
 
             <div class="flex gap-3 pt-1">
               <button v-if="expenseForm.id" type="button" @click="deleteExpense" class="h-12 w-12 rounded-2xl border border-red-200 text-red-500 grid place-items-center"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-              <button type="submit" class="h-12 flex-1 rounded-2xl bg-sageDeep text-white font-semibold">儲存支出與分帳</button>
+              <button type="submit" class="h-12 flex-1 rounded-2xl bg-sageDeep text-white font-semibold">{{ expenseQuickMode && !expenseForm.id ? '⚡ 快速記帳' : '儲存支出與分帳' }}</button>
             </div>
           </form>
         </div>
@@ -777,7 +662,7 @@
               <input v-model.trim="tripForm.title" type="text" required class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-4 font-normal">
             </label>
             <label class="block text-xs font-semibold">目的地城市 (英文)
-              <input v-model.trim="tripForm.city" type="text" required class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-4 font-normal uppercase">
+              <input v-model.trim="tripForm.city" type="text" required class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-4 font-normal uppercase" @change="autoCurrency">
             </label>
             <div class="grid grid-cols-2 gap-3">
               <label class="text-xs font-semibold">出發日
@@ -794,9 +679,28 @@
               <input v-model.trim="tripForm.memberNamesText" class="mt-1.5 w-full h-12 rounded-2xl bg-white border border-line px-4 font-normal" placeholder="例如：我, 旅伴A">
             </label>
             <div class="flex gap-3 pt-2">
+              <button type="button" @click="openModal('tripList')" class="h-12 px-4 rounded-2xl border border-line text-ink font-semibold text-sm flex items-center gap-1.5">
+                <i data-lucide="list" class="w-4 h-4"></i>我的旅程
+              </button>
               <button type="submit" class="h-12 flex-1 rounded-2xl bg-sageDeep text-white font-semibold">套用設定</button>
             </div>
           </form>
+
+          <!-- #18: 資料備份功能 -->
+          <div class="mt-6 pt-5 border-t border-line">
+            <p class="text-[10px] tracking-widest text-ink/50 font-bold uppercase mb-3">Data Backup</p>
+            <h3 class="text-sm font-bold text-ink mb-3">資料備份與還原</h3>
+            <div class="grid grid-cols-2 gap-3">
+              <button @click="exportBackup" type="button" class="h-12 rounded-2xl bg-white border border-line text-ink text-xs font-bold flex items-center justify-center gap-2 shadow-sm">
+                <i data-lucide="download" class="w-4 h-4 text-sageDeep"></i>匯出備份
+              </button>
+              <label class="h-12 rounded-2xl bg-white border border-line text-ink text-xs font-bold flex items-center justify-center gap-2 shadow-sm cursor-pointer">
+                <i data-lucide="upload" class="w-4 h-4 text-sageDeep"></i>匯入備份
+                <input type="file" accept=".json" class="hidden" @change="importBackup">
+              </label>
+            </div>
+            <p class="mt-2 text-[10px] text-ink/40 font-medium">匯出會下載 JSON 檔案，可用匯入還原所有行程與記帳資料</p>
+          </div>
         </div>
       </div>
     </transition>
@@ -814,6 +718,154 @@
               <span :style="{ fontSize: opt.preview }">{{ opt.label }} ({{ opt.note }})</span>
               <span v-if="fontSize === opt.id" class="text-sageDeep font-bold">✓</span>
             </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- #11: Settlement Modal (結算明細) -->
+    <transition name="modal">
+      <div v-if="modal === 'settlement'" class="fixed inset-0 z-[1000] bg-ink/35 flex items-end justify-center" @click.self="closeModal">
+        <div class="modal-card w-full max-w-[440px] max-h-[85vh] overflow-y-auto rounded-t-[30px] bg-fog p-5 pb-8 shadow-float" role="dialog" aria-modal="true" aria-label="結算明細">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <p class="text-[10px] tracking-widest text-sageDeep font-bold uppercase">Settlement</p>
+              <h2 class="text-xl font-bold">結算到目前</h2>
+            </div>
+            <button @click="closeModal" class="w-9 h-9 rounded-xl bg-white grid place-items-center"><i data-lucide="x" class="w-4 h-4"></i></button>
+          </div>
+
+          <!-- 總覽 -->
+          <div class="rounded-[20px] bg-gradient-to-br from-[#def5f1] to-[#e8f2fb] p-4 border border-white shadow-sm mb-4">
+            <p class="text-[10px] text-ink/50 font-bold">共 {{ expenses.length }} 筆支出 · 總計</p>
+            <p class="text-2xl font-bold text-ink mt-1">{{ money(totalSpentTwd) }}</p>
+          </div>
+
+          <!-- 每人餘額 -->
+          <div class="space-y-2 mb-5">
+            <p class="text-xs font-bold text-ink/60 mb-2">各人餘額</p>
+            <div v-for="(bal, name) in settlementBalances" :key="name" class="flex items-center justify-between bg-white rounded-2xl px-4 py-3 border border-line">
+              <span class="text-sm font-bold text-ink">{{ name }}</span>
+              <span class="text-sm font-bold" :class="bal > 1 ? 'text-sageDeep' : bal < -1 ? 'text-red-400' : 'text-ink/40'">
+                {{ bal > 1 ? '+' : '' }}{{ money(bal) }}
+              </span>
+            </div>
+          </div>
+
+          <!-- 轉帳建議 -->
+          <div v-if="settlementDetails.length" class="space-y-2">
+            <p class="text-xs font-bold text-ink/60 mb-2">💸 建議轉帳</p>
+            <div v-for="(t, idx) in settlementDetails" :key="idx" class="flex items-center justify-between bg-white rounded-2xl px-4 py-3 border border-line shadow-sm">
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-bold text-ink">{{ t.from }}</span>
+                <span class="text-ink/30">→</span>
+                <span class="text-sm font-bold text-ink">{{ t.to }}</span>
+              </div>
+              <span class="text-sm font-bold text-sageDeep">{{ money(t.amount) }}</span>
+            </div>
+          </div>
+          <div v-else class="rounded-[20px] bg-mint/40 p-5 text-center border border-line">
+            <p class="text-sm font-bold text-sageDeep">✨ 帳目結清，無需轉帳</p>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- Share Modal (分享選單) -->
+    <transition name="modal">
+      <div v-if="modal === 'share'" class="fixed inset-0 z-[1000] bg-ink/35 flex items-end justify-center" @click.self="closeModal">
+        <div class="modal-card w-full max-w-[440px] rounded-t-[30px] bg-fog p-5 pb-8 shadow-float" role="dialog" aria-modal="true" aria-label="分享">
+          <div class="flex items-center justify-between mb-5">
+            <h2 class="text-xl font-bold">分享旅程</h2>
+            <button @click="closeModal" class="w-9 h-9 rounded-xl bg-white grid place-items-center"><i data-lucide="x" class="w-4 h-4"></i></button>
+          </div>
+          <div class="space-y-3">
+            <!-- 雲端即時共編 (Firebase) -->
+            <button @click="shareCloudLink" class="w-full rounded-[20px] bg-gradient-to-r from-[#f3faf7] to-[#f7f4fc] border-2 border-sageDeep p-4 shadow-card text-left flex items-center gap-4">
+              <span class="w-11 h-11 rounded-2xl bg-sageDeep grid place-items-center shrink-0"><i data-lucide="cloud" class="w-5 h-5 text-white"></i></span>
+              <div>
+                <h3 class="font-bold text-sm text-ink">即時共編連結</h3>
+                <p class="text-[11px] text-ink/50 mt-0.5">旅伴開啟即可同步編輯行程，離線也能使用</p>
+                <p v-if="cloudTripId" class="text-[9px] text-sageDeep font-bold mt-1">✓ 已啟用雲端同步</p>
+              </div>
+            </button>
+            <button @click="shareTripLink" class="w-full rounded-[20px] bg-white border border-line p-4 shadow-sm text-left flex items-center gap-4">
+              <span class="w-11 h-11 rounded-2xl bg-[#e8e0ef] grid place-items-center shrink-0"><i data-lucide="link" class="w-5 h-5 text-[#7b6aa6]"></i></span>
+              <div>
+                <h3 class="font-bold text-sm text-ink">分享行程連結</h3>
+                <p class="text-[11px] text-ink/50 mt-0.5">產生含行程資料的連結，旅伴開啟即可匯入</p>
+              </div>
+            </button>
+            <button @click="shareScreenshot" class="w-full rounded-[20px] bg-white border border-line p-4 shadow-sm text-left flex items-center gap-4">
+              <span class="w-11 h-11 rounded-2xl bg-[#fff5dc] grid place-items-center shrink-0"><i data-lucide="camera" class="w-5 h-5 text-[#c9a635]"></i></span>
+              <div>
+                <h3 class="font-bold text-sm text-ink">分享行程截圖</h3>
+                <p class="text-[11px] text-ink/50 mt-0.5">將當前畫面擷取為圖片並分享</p>
+              </div>
+            </button>
+            <button @click="exportTripJSON" class="w-full rounded-[20px] bg-white border border-line p-4 shadow-sm text-left flex items-center gap-4">
+              <span class="w-11 h-11 rounded-2xl bg-mint grid place-items-center shrink-0"><i data-lucide="download" class="w-5 h-5 text-sageDeep"></i></span>
+              <div>
+                <h3 class="font-bold text-sm text-ink">匯出備份 (JSON)</h3>
+                <p class="text-[11px] text-ink/50 mt-0.5">下載完整旅程資料，可匯入還原</p>
+              </div>
+            </button>
+            <button @click="triggerImportJSON" class="w-full rounded-[20px] bg-white border border-line p-4 shadow-sm text-left flex items-center gap-4">
+              <span class="w-11 h-11 rounded-2xl bg-[#e8f2fb] grid place-items-center shrink-0"><i data-lucide="upload" class="w-5 h-5 text-[#5584a8]"></i></span>
+              <div>
+                <h3 class="font-bold text-sm text-ink">匯入旅程資料</h3>
+                <p class="text-[11px] text-ink/50 mt-0.5">從 JSON 檔案或連結還原旅程</p>
+              </div>
+            </button>
+          </div>
+          <input ref="importFileInput" type="file" accept=".json" class="hidden" @change="handleImportFile">
+        </div>
+      </div>
+    </transition>
+
+    <!-- Trip List Modal (多旅程管理) -->
+    <transition name="modal">
+      <div v-if="modal === 'tripList'" class="fixed inset-0 z-[1000] bg-ink/35 flex items-end justify-center" @click.self="closeModal">
+        <div class="modal-card w-full max-w-[440px] max-h-[85vh] overflow-y-auto rounded-t-[30px] bg-fog p-5 pb-8 shadow-float" role="dialog" aria-modal="true" aria-label="旅程列表">
+          <div class="flex items-center justify-between mb-5">
+            <div>
+              <p class="text-[10px] tracking-widest text-sageDeep font-bold">MY TRIPS</p>
+              <h2 class="text-xl font-bold">我的旅程</h2>
+            </div>
+            <button @click="closeModal" class="w-9 h-9 rounded-xl bg-white grid place-items-center"><i data-lucide="x" class="w-4 h-4"></i></button>
+          </div>
+          <div class="space-y-3">
+            <button v-for="(t, idx) in tripList" :key="t.id" @click="switchTrip(t.id)" class="w-full rounded-[20px] p-4 text-left flex items-center gap-3 border transition" :class="t.id === currentTripId ? 'bg-mint/50 border-sageDeep shadow-card' : 'bg-white border-line shadow-sm'">
+              <span class="w-10 h-10 rounded-2xl grid place-items-center shrink-0 text-base" :class="t.id === currentTripId ? 'bg-sageDeep text-white' : 'bg-fog text-ink/40'">
+                <i data-lucide="map-pin" class="w-5 h-5"></i>
+              </span>
+              <div class="min-w-0 flex-1">
+                <h3 class="font-bold text-sm text-ink truncate">{{ t.title }}</h3>
+                <p class="text-[10px] text-ink/50 mt-0.5">{{ t.city }} · {{ t.startDate }} ~ {{ t.endDate }}</p>
+              </div>
+              <span v-if="t.id === currentTripId" class="text-sageDeep text-xs font-bold shrink-0">目前</span>
+              <span v-else @click.stop="deleteTrip(t.id)" role="button" class="w-8 h-8 rounded-xl grid place-items-center text-red-400 hover:bg-red-50 shrink-0 cursor-pointer"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></span>
+            </button>
+          </div>
+          <button @click="createNewTrip" class="mt-4 w-full h-12 rounded-2xl border-2 border-dashed border-sage text-sageDeep font-bold text-sm flex items-center justify-center gap-2">
+            <i data-lucide="plus" class="w-4 h-4"></i> 建立新旅程
+          </button>
+        </div>
+      </div>
+    </transition>
+
+    <!-- Import URL Confirm Modal -->
+    <transition name="modal">
+      <div v-if="modal === 'importConfirm'" class="fixed inset-0 z-[1000] bg-ink/35 flex items-center justify-center px-5" @click.self="closeModal">
+        <div class="modal-card w-full max-w-[360px] rounded-[28px] bg-fog p-6 shadow-float text-center" role="dialog" aria-modal="true">
+          <div class="w-14 h-14 rounded-2xl bg-[#e8e0ef] grid place-items-center mx-auto mb-4">
+            <i data-lucide="download" class="w-6 h-6 text-[#7b6aa6]"></i>
+          </div>
+          <h2 class="text-lg font-bold text-ink">收到共享行程</h2>
+          <p class="mt-2 text-xs text-ink/60 font-medium">{{ importPreview.title || '旅程' }} ({{ importPreview.city }})<br>{{ importPreview.startDate }} ~ {{ importPreview.endDate }}</p>
+          <div class="mt-5 flex gap-3">
+            <button @click="cancelImport" class="h-11 flex-1 rounded-2xl border border-line text-ink font-semibold text-sm">取消</button>
+            <button @click="confirmImport" class="h-11 flex-1 rounded-2xl bg-sageDeep text-white font-semibold text-sm">匯入旅程</button>
           </div>
         </div>
       </div>
@@ -843,6 +895,71 @@
           </div>
           <p v-if="safeCodeError" class="mt-3 text-xs text-red-500 font-semibold">安全碼錯誤，請重新輸入</p>
           <button @click="closeModal" class="mt-5 text-xs font-semibold text-ink/40">取消</button>
+        </div>
+      </div>
+    </transition>
+
+    <!-- Safe Info Dialog (解鎖後顯示住宿/安心卡資訊) -->
+    <transition name="modal">
+      <div v-if="modal === 'safeinfo'" class="fixed inset-0 z-[1000] bg-ink/35 flex items-end sm:items-center justify-center px-0 sm:px-5" @click.self="closeModal">
+        <div class="modal-card w-full sm:max-w-[400px] rounded-t-[28px] sm:rounded-[28px] bg-fog p-5 pb-8 shadow-float max-h-[85vh] overflow-y-auto" role="dialog" aria-modal="true" :aria-label="safeInfoType === 'hotel' ? '今日住宿' : '出遊安心卡'">
+          
+          <!-- 今日住宿 -->
+          <template v-if="safeInfoType === 'hotel'">
+            <h2 class="flex items-center gap-2 text-lg font-bold text-ink mb-4">
+              <span class="grid h-8 w-8 place-items-center rounded-xl bg-[#fef0ee] text-[#d4836b]"><i data-lucide="home" class="w-4.5 h-4.5"></i></span>
+              今日住宿
+            </h2>
+            <div v-if="todayHotel" class="p-4 rounded-2xl bg-white border border-line space-y-2">
+              <a :href="todayHotel.url" target="_blank" rel="noopener" class="font-bold text-sm text-sageDeep underline decoration-sage underline-offset-2 block">
+                {{ todayHotel.name }} <i data-lucide="external-link" class="w-3 h-3 inline-block"></i>
+              </a>
+              <p class="font-semibold text-ink/80 text-xs">{{ todayHotel.krName }}</p>
+              <p class="text-xs text-ink/60 font-medium">📍 {{ todayHotel.address }}</p>
+            </div>
+            <div v-else class="p-4 rounded-2xl bg-white border border-line text-center">
+              <p class="text-sm text-ink/50">今天沒有住宿資訊</p>
+            </div>
+          </template>
+
+          <!-- 出遊安心卡 -->
+          <template v-else>
+            <h2 class="flex items-center gap-2 text-lg font-bold text-ink mb-4">
+              <span class="grid h-8 w-8 place-items-center rounded-xl bg-mint text-sageDeep"><i data-lucide="shield-check" class="w-4.5 h-4.5"></i></span>
+              出遊安心卡
+            </h2>
+            <div class="space-y-3">
+              <div class="rounded-[20px] bg-mint/40 p-4 border border-line">
+                <p class="text-xs font-bold tracking-wider text-sageDeep mb-2 uppercase">救助相關專線</p>
+                <ul class="space-y-2 text-sm text-ink font-semibold">
+                  <li class="flex justify-between items-center" v-for="c in safeContacts.embassy" :key="c.label">
+                    <span>{{ c.label }}</span>
+                    <a :href="'tel:' + c.phone" class="text-sageDeep underline">{{ c.phone }}</a>
+                  </li>
+                </ul>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="rounded-[20px] bg-white p-3.5 border border-line">
+                  <p class="text-xs font-bold tracking-wider text-ink/50 mb-2">當地緊急電話</p>
+                  <ul class="space-y-1.5 text-sm text-ink font-semibold">
+                    <li>報警：<a href="tel:112" class="underline">112</a></li>
+                    <li>網路犯罪：<a href="tel:118" class="underline">118</a></li>
+                    <li>火災急救：<a href="tel:119" class="underline">119</a></li>
+                  </ul>
+                </div>
+                <div class="rounded-[20px] bg-white p-3.5 border border-line">
+                  <p class="text-xs font-bold tracking-wider text-ink/50 mb-2">緊急聯絡人</p>
+                  <ul class="space-y-2 text-sm text-ink font-semibold">
+                    <li v-for="(c, idx) in safeContacts.emergency" :key="c.name" :class="idx > 0 ? 'pt-1.5 border-t border-line' : ''">
+                      {{ c.name }}<br><a :href="'tel:' + c.phone" class="text-sageDeep underline text-xs">{{ c.phone }}</a>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <button @click="closeModal" class="mt-5 w-full py-3 rounded-2xl bg-white border border-line text-sm font-bold text-ink/60">關閉</button>
         </div>
       </div>
     </transition>
@@ -902,9 +1019,16 @@
             if (data.trip && !data.trip.memberNames) {
               data.trip.memberNames = ['我', '旅伴'];
             }
+            if (data.trip && !data.trip.hotelSchedule) {
+              data.trip.hotelSchedule = [
+                { hotelIndex: 0, startDate: '2026-08-13', endDate: '2026-08-14' },
+                { hotelIndex: 1, startDate: '2026-08-15', endDate: '2026-08-17' }
+              ];
+            }
             if (Array.isArray(data.plans)) {
               data.plans.forEach(p => {
                 if (!p.location) p.location = '';
+                if (!p.locationKr) p.locationKr = '';
                 if (!p.transport) p.transport = 'subway';
                 if (!p.url) p.url = '';
               });
@@ -928,7 +1052,11 @@
             startDate: '2026-08-13',
             endDate: '2026-08-17',
             budget: 50000,
-            memberNames: ['我', '旅伴']
+            memberNames: ['我', '旅伴'],
+            hotelSchedule: [
+              { hotelIndex: 0, startDate: '2026-08-13', endDate: '2026-08-14' },
+              { hotelIndex: 1, startDate: '2026-08-15', endDate: '2026-08-17' }
+            ]
           },
           plans: [
             { id: uid(), date: '2026-08-13', time: '14:00', title: '台灣機場T2會合', category: '交通', location: '桃園機場T2', note: '✈️ 去程航班 OZ714', transport: 'flight', order: 0 },
@@ -957,8 +1085,20 @@
 
         const fontSize = ref('standard');
         const activeTab = ref('today');
-        const selectedDate = ref(trip.value.startDate);
-        const selectedDay = ref(0);
+        const selectedDate = ref((() => {
+          const todayIso = formatISO(new Date());
+          if (todayIso >= trip.value.startDate && todayIso <= trip.value.endDate) return todayIso;
+          return trip.value.startDate;
+        })());
+        const selectedDay = ref((() => {
+          const todayIso = formatISO(new Date());
+          if (todayIso >= trip.value.startDate && todayIso <= trip.value.endDate) {
+            const start = parseLocalDate(trip.value.startDate);
+            const today = parseLocalDate(todayIso);
+            return Math.round((today - start) / 86400000);
+          }
+          return 0;
+        })());
         const modal = ref('');
         const toast = ref('');
         const honorificMode = ref('general');
@@ -968,6 +1108,8 @@
         const planForm = ref({});
         const expenseForm = ref({});
         const tripForm = ref({});
+        const planQuickMode = ref(false);
+        const expenseQuickMode = ref(true);
 
         const tabs = [
           { value: 'today', label: '今日', icon: 'calendar-days' },
@@ -976,7 +1118,8 @@
           { value: 'language', label: '韓文', icon: 'languages' }
         ];
 
-        const hotels = ref([]);
+        // 偵測到的預設幣別（由 autoCurrency 設定）
+        const detectedCurrency = ref('');
 
         // 敏感資料以 Base64 編碼儲存，解鎖後才解碼顯示
         const SAFE_CODE = 'MDkyNw=='; // encoded PIN
@@ -986,12 +1129,13 @@
         const safeUnlocked = ref(sessionStorage.getItem('safe_unlocked') === 'true');
         const safeCodeError = ref(false);
         const safeCodeRefs = ref([]);
+        const safeInfoType = ref('hotel'); // 'hotel' or 'emergency'
         const safeContacts = ref(safeUnlocked.value ? decodeB64(ENCODED_CONTACTS) : { embassy: [], emergency: [], hotels: [] });
 
         const planCategories = ['景點', '用餐', '購物', '交通', '住宿', '放鬆', '票券', '其他'];
         const expenseCategories = ['交通', '住宿', '美食', '購物', '票券', '其他'];
-        const currencies = ['KRW', 'TWD', 'THB', 'JPY', 'USD'];
-        const koreanCategories = ["全部", "打招呼", "實用", "交通", "購物", "餐廳", "追星"];
+        const currencies = ['KRW', 'TWD'];
+        const koreanCategories = ["全部", "打招呼", "實用", "交通", "購物", "餐廳", "飯店", "退稅", "追星"];
 
         const koreanPhrases = [
           { id: 'k1', category: '打招呼', chinese: '你好', general: '안녕하세요', highest: '안녕하십니까', pronounceGeneral: '安妞哈些優', pronounceHighest: '安妞哈西咪嘎', tip: '見面隨時可用' },
@@ -1013,28 +1157,194 @@
           { id: 'r4', category: '餐廳', chinese: '不要太辣', general: '너무 맵지 않게 해 주세요', highest: '너무 맵지 않게 해 주십시오', pronounceGeneral: '弄木 妹基 安Ｋ 嘿 粗些優', pronounceHighest: '弄木 妹基 安Ｋ 嘿 粗西系歐', tip: '韓國料理偏辣，點餐時必備' },
           { id: 'k8', category: '追星', chinese: '很帥', general: '멋있어요', highest: '멋있습니다', pronounceGeneral: '摸喜搜優', pronounceHighest: '摸喜斯咪搭', tip: '稱讚偶像' },
           { id: 'k9', category: '追星', chinese: '愛你喔', general: '사랑해요', highest: '사랑합니다', pronounceGeneral: '撒郎嘿優', pronounceHighest: '撒郎哈咪搭', tip: '對偶像告白應援' },
-          { id: 'k10', category: '追星', chinese: '請看這邊', general: '여기 봐주세요', highest: '여기 봐주십시오', pronounceGeneral: '由基 怕粗些優', pronounceHighest: '由基 怕粗西系歐', tip: '拍照時吸引視線' }
+          { id: 'k10', category: '追星', chinese: '請看這邊', general: '여기 봐주세요', highest: '여기 봐주십시오', pronounceGeneral: '由基 怕粗些優', pronounceHighest: '由基 怕粗西系歐', tip: '拍照時吸引視線' },
+          // #12: 飯店 check-in 相關句子
+          { id: 'h1', category: '飯店', chinese: '我要辦理入住', general: '체크인 하려고요', highest: '체크인 하려고 합니다', pronounceGeneral: '切克因 哈溜勾優', pronounceHighest: '切克因 哈溜勾 哈咪搭', tip: '到飯店櫃檯第一句' },
+          { id: 'h2', category: '飯店', chinese: '我要退房', general: '체크아웃 해 주세요', highest: '체크아웃 해 주십시오', pronounceGeneral: '切克阿屋 嘿 粗些優', pronounceHighest: '切克阿屋 嘿 粗西系歐', tip: '退房時出示房卡' },
+          { id: 'h3', category: '飯店', chinese: '請幫我寄放行李', general: '짐 좀 맡아 주세요', highest: '짐 좀 맡아 주십시오', pronounceGeneral: '基姆 宗 瑪搭 粗些優', pronounceHighest: '基姆 宗 瑪搭 粗西系歐', tip: '退房後或入住前寄放大件行李' },
+          { id: 'h4', category: '飯店', chinese: '我來取行李', general: '짐 찾으러 왔어요', highest: '짐 찾으러 왔습니다', pronounceGeneral: '基姆 恰子樓 哇搜優', pronounceHighest: '基姆 恰子樓 哇斯咪搭', tip: '回來拿寄放的行李' },
+          { id: 'h5', category: '飯店', chinese: 'WiFi 密碼是什麼？', general: '와이파이 비밀번호가 뭐예요?', highest: '와이파이 비밀번호가 무엇입니까?', pronounceGeneral: '歪衣趴衣 批咪兒崩厚嘎 模耶優', pronounceHighest: '歪衣趴衣 批咪兒崩厚嘎 木歐西咪嘎', tip: '房間或大廳連 WiFi 時' },
+          { id: 'h6', category: '飯店', chinese: '房間鑰匙弄丟了', general: '방 열쇠를 잃어버렸어요', highest: '방 열쇠를 잃어버렸습니다', pronounceGeneral: '邦 悠兒乘烈 衣樓波溜搜優', pronounceHighest: '邦 悠兒乘烈 衣樓波溜斯咪搭', tip: '請櫃檯補辦房卡' },
+          // #13: 退稅相關句子
+          { id: 'x1', category: '退稅', chinese: '可以退稅嗎？', general: '택스 프리 되나요?', highest: '택스 프리 됩니까?', pronounceGeneral: '胎克斯 普裡 推那優', pronounceHighest: '胎克斯 普裡 推咪嘎', tip: '結帳前先問店員，滿3萬韓元可退稅' },
+          { id: 'x2', category: '退稅', chinese: '請幫我辦退稅', general: '택스 리펀드 해 주세요', highest: '택스 리펀드 해 주십시오', pronounceGeneral: '胎克斯 哩ㄆㄣ的 嘿 粗些優', pronounceHighest: '胎克斯 哩ㄆㄣ的 嘿 粗西系歐', tip: '部分店家可當場退稅' },
+          { id: 'x3', category: '退稅', chinese: '退稅櫃檯在哪裡？', general: '택스 리펀드 카운터가 어디예요?', highest: '택스 리펀드 카운터가 어디입니까?', pronounceGeneral: '胎克斯 哩ㄆㄣ的 咖溫偷嘎 歐低耶優', pronounceHighest: '胎克斯 哩ㄆㄣ的 咖溫偷嘎 歐低衣咪嘎', tip: '機場退稅在出境大廳找 Tax Refund' },
+          { id: 'x4', category: '退稅', chinese: '護照在這裡', general: '여권 여기 있어요', highest: '여권 여기 있습니다', pronounceGeneral: '悠拐恩 悠基 衣搜優', pronounceHighest: '悠拐恩 悠基 衣斯咪搭', tip: '退稅時需出示護照' },
+          { id: 'x5', category: '退稅', chinese: '可以退現金嗎？', general: '현금으로 받을 수 있어요?', highest: '현금으로 받을 수 있습니까?', pronounceGeneral: '賢個姆烏樓 八的兒 蘇 衣搜優', pronounceHighest: '賢個姆烏樓 八的兒 蘇 衣斯咪嘎', tip: '市區退稅通常退信用卡，機場可選現金' }
         ];
 
-        const saveLocal = () => localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify({
-          _schemaVersion: CONFIG.SCHEMA_VERSION,
-          trip: trip.value,
-          plans: plans.value,
-          expenses: expenses.value
-        }));
+        const saveLocal = () => {
+          // 使用當前旅程的 storage key
+          const currentTrip = tripList.value.find(t => t.id === currentTripId.value);
+          const key = (currentTrip && currentTrip.storageKey) || CONFIG.STORAGE_KEY;
+          localStorage.setItem(key, JSON.stringify({
+            _schemaVersion: CONFIG.SCHEMA_VERSION,
+            trip: trip.value,
+            plans: plans.value,
+            expenses: expenses.value
+          }));
+        };
 
         // 2.4: 使用 debounce 節流寫入，避免每次按鍵都觸發序列化
         const debouncedSaveLocal = debounce(saveLocal, CONFIG.DEBOUNCE_MS);
         watch([trip, plans, expenses], debouncedSaveLocal, { deep: true });
+
+        // ===== Firebase Cloud Sync =====
+        const cloudTripId = ref(localStorage.getItem('hamkke-cloud-trip-id') || '');
+        const syncStatus = ref('idle'); // idle | syncing | synced | offline | error
+        let _skipRemoteUpdate = false; // 防止 onSnapshot 回寫時觸發重複上傳
+
+        // 儲存 cloudTripId 到 localStorage
+        watch(cloudTripId, (id) => {
+          if (id) localStorage.setItem('hamkke-cloud-trip-id', id);
+          else localStorage.removeItem('hamkke-cloud-trip-id');
+        });
+
+        // Trip metadata 變更時同步到 Firestore
+        const debouncedSyncTripMeta = debounce(() => {
+          if (!cloudTripId.value || _skipRemoteUpdate) return;
+          const FB = window.HamkkeFirebase;
+          if (FB && FB.isFirebaseReady()) {
+            FB.saveTripMeta(cloudTripId.value, { ...trip.value });
+          }
+        }, 1000);
+        watch(trip, debouncedSyncTripMeta, { deep: true });
+
+        // 啟動即時同步監聽
+        function startCloudSync(tripId) {
+          const FB = window.HamkkeFirebase;
+          if (!FB || !FB.isFirebaseReady()) return;
+          syncStatus.value = 'syncing';
+          FB.listenToTrip(tripId, {
+            onTripUpdate(data) {
+              _skipRemoteUpdate = true;
+              // 只更新有變化的欄位，保留本地欄位不被覆蓋
+              Object.keys(data).forEach(key => {
+                if (trip.value[key] !== data[key]) {
+                  trip.value[key] = data[key];
+                }
+              });
+              nextTick(() => { _skipRemoteUpdate = false; });
+            },
+            onPlansUpdate(remotePlans) {
+              _skipRemoteUpdate = true;
+              plans.value = remotePlans.sort((a, b) =>
+                Number.isFinite(Number(a.order)) && Number.isFinite(Number(b.order))
+                  ? a.order - b.order : String(a.time || '').localeCompare(String(b.time || ''))
+              );
+              nextTick(() => { _skipRemoteUpdate = false; });
+            },
+            onExpensesUpdate(remoteExpenses) {
+              _skipRemoteUpdate = true;
+              expenses.value = remoteExpenses;
+              nextTick(() => { _skipRemoteUpdate = false; });
+            }
+          });
+          syncStatus.value = 'synced';
+        }
+
+        // 上傳旅程到雲端（首次啟用同步）
+        async function enableCloudSync() {
+          const FB = window.HamkkeFirebase;
+          if (!FB || !FB.isFirebaseReady()) {
+            showToast('Firebase 尚未準備好，請稍後再試');
+            return null;
+          }
+          syncStatus.value = 'syncing';
+          const tripId = await FB.createCloudTrip({
+            trip: trip.value,
+            plans: plans.value,
+            expenses: expenses.value
+          });
+          if (tripId) {
+            cloudTripId.value = tripId;
+            startCloudSync(tripId);
+            showToast('已啟用雲端同步！');
+            return tripId;
+          } else {
+            syncStatus.value = 'error';
+            showToast('啟用雲端同步失敗');
+            return null;
+          }
+        }
+
+        // 加入旅伴分享的旅程
+        async function joinSharedTrip(tripId) {
+          const FB = window.HamkkeFirebase;
+          if (!FB || !FB.isFirebaseReady()) {
+            showToast('Firebase 尚未準備好');
+            return false;
+          }
+          syncStatus.value = 'syncing';
+          const data = await FB.joinCloudTrip(tripId);
+          if (data) {
+            trip.value = data.trip;
+            plans.value = data.plans;
+            expenses.value = data.expenses;
+            cloudTripId.value = tripId;
+            saveLocal(); // 同步一份到 localStorage 作為離線 fallback
+            startCloudSync(tripId);
+            showToast('已加入共編旅程！');
+            // 清除 URL 參數
+            window.history.replaceState({}, '', window.location.pathname);
+            return true;
+          } else {
+            syncStatus.value = 'error';
+            showToast('找不到此旅程或加入失敗');
+            return false;
+          }
+        }
+
+        // 產生雲端分享連結
+        async function shareCloudLink() {
+          const FB = window.HamkkeFirebase;
+          if (!FB) { showToast('Firebase 未載入'); return; }
+          let tripId = cloudTripId.value;
+          // 如果還沒上傳過，先建立雲端旅程
+          if (!tripId) {
+            tripId = await enableCloudSync();
+            if (!tripId) return;
+          }
+          const url = FB.generateShareUrl(tripId);
+          if (navigator.clipboard) {
+            await navigator.clipboard.writeText(url);
+            showToast('雲端共編連結已複製！傳給旅伴即可同步');
+          } else {
+            const ta = document.createElement('textarea');
+            ta.value = url;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            showToast('雲端共編連結已複製！');
+          }
+          closeModal();
+        }
+
+        // #10: 幣別切換時自動調整匯率預設值（僅在新增模式下生效）
+        watch(() => expenseForm.value.currency, (newCurrency, oldCurrency) => {
+          // 僅在使用者主動切換幣別時調整，避免覆蓋已存在的匯率
+          if (!oldCurrency || expenseForm.value.id) return;
+          if (newCurrency === 'TWD') {
+            expenseForm.value.rate = 1;
+          } else if (newCurrency === 'KRW') {
+            expenseForm.value.rate = CONFIG.DEFAULT_RATE_KRW_TWD;
+          }
+        });
         
         // 切換 Tab 與 Modal 時更新 Lucide Icons
         watch([activeTab, modal], () => {
           nextTick(() => window.lucide && window.lucide.createIcons());
         });
 
-        // setFontSize 重新設計
+        // setFontSize 重新設計 — 修改 html 根元素 font-size 讓 rem 單位跟著縮放
+        const fontScaleMap = { standard: '', large: '17.6px', xlarge: '20px' };
+        function applyFontScale(size) {
+          document.documentElement.style.fontSize = fontScaleMap[size] || '';
+        }
         function setFontSize(size) {
           fontSize.value = size;
+          applyFontScale(size);
           localStorage.setItem("fontSize", size);
           closeModal();
           showToast('字體大小已切換');
@@ -1083,51 +1393,74 @@
         const filteredExpenses = computed(() => expenseFilter.value === 'all' ? expenses.value : expenses.value.filter(e => e.category === expenseFilter.value));
         const filteredKoreanPhrases = computed(() => koreanFilter.value === '全部' ? koreanPhrases : koreanPhrases.filter(p => p.category === koreanFilter.value));
 
+        // #6: 修復分帳邏輯 — 確保三種模式（平分/指定金額/依比例）計算正確
         const settlementBalances = computed(() => {
           let balances = {};
           const members = trip.value.memberNames || ['我', '旅伴'];
           members.forEach(m => balances[m] = 0);
+
           expenses.value.forEach(e => {
             const rate = Number(e.rate) || 1;
-            const amt = Number(e.amount || 0) * rate;
+            const totalOriginal = Number(e.amount || 0);
+            const amt = totalOriginal * rate; // 台幣總額
 
-            // B05: 遍歷所有付款人，依各付款人實付金額計算
-            const payers = Array.isArray(e.payers) && e.payers.length > 0 ? e.payers : [{ name: members[0], amount: amt }];
-            let totalPaid = payers.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-            // 如果付款人金額加總為 0，視為第一位付款人付全額
-            if (totalPaid === 0) {
-              payers.forEach((p, i) => { if (i === 0) p.amount = amt; });
-              totalPaid = amt;
+            // ---- 貸方：誰先墊付 ----
+            const rawPayers = Array.isArray(e.payers) && e.payers.length > 0
+              ? e.payers
+              : [{ name: members[0], amount: totalOriginal }];
+            let totalPayerAmt = rawPayers.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+
+            // 若付款人金額皆為 0，視為第一位付款人付全額（原幣）
+            if (totalPayerAmt === 0) {
+              rawPayers[0] = { ...rawPayers[0], amount: totalOriginal };
+              totalPayerAmt = totalOriginal;
             }
-            payers.forEach(p => {
+
+            // 依比例分配 TWD 額度（避免使用者輸入加總不等於 amount 導致失衡）
+            rawPayers.forEach(p => {
               const payerName = p.name || members[0];
-              const payerAmt = (Number(p.amount) || 0) / totalPaid * amt;
-              if (balances[payerName] !== undefined) balances[payerName] += payerAmt;
+              if (balances[payerName] === undefined) balances[payerName] = 0;
+              const share = totalPayerAmt > 0 ? (Number(p.amount) || 0) / totalPayerAmt : 0;
+              balances[payerName] += share * amt;
             });
 
-            // B04: 依據 splitType 分別計算每人應付金額
+            // ---- 借方：誰該付 ----
             const splitType = e.splitType || 'equal';
             const splits = Array.isArray(e.splits) ? e.splits : [];
+            const validSplits = splits.filter(sp => members.includes(sp.name));
 
             if (splitType === 'exact') {
-              // 自行輸入應付金額
-              splits.forEach(sp => {
-                const name = sp.name;
-                const val = Number(sp.value) || 0;
-                // 換算成台幣 (splits 中的值是原幣金額)
-                const owedTwd = val * rate;
-                if (balances[name] !== undefined) balances[name] -= owedTwd;
-              });
+              // 自行輸入應付金額（原幣）
+              const totalSplitOriginal = validSplits.reduce((s, sp) => s + (Number(sp.value) || 0), 0);
+              if (totalSplitOriginal > 0) {
+                // 按比例換算，確保借方總額 = 貸方總額
+                validSplits.forEach(sp => {
+                  const name = sp.name;
+                  const val = Number(sp.value) || 0;
+                  const owedTwd = (val / totalSplitOriginal) * amt;
+                  if (balances[name] !== undefined) balances[name] -= owedTwd;
+                });
+              } else {
+                // 回退到平分
+                const splitAmt = amt / (members.length || 1);
+                members.forEach(m => { balances[m] -= splitAmt; });
+              }
             } else if (splitType === 'ratio') {
               // 依比例分攤
-              const totalRatio = splits.reduce((s, sp) => s + (Number(sp.value) || 0), 0) || 1;
-              splits.forEach(sp => {
-                const name = sp.name;
-                const ratio = (Number(sp.value) || 0) / totalRatio;
-                if (balances[name] !== undefined) balances[name] -= amt * ratio;
-              });
+              const totalRatio = validSplits.reduce((s, sp) => s + (Number(sp.value) || 0), 0);
+              if (totalRatio > 0) {
+                validSplits.forEach(sp => {
+                  const name = sp.name;
+                  const ratio = (Number(sp.value) || 0) / totalRatio;
+                  if (balances[name] !== undefined) balances[name] -= amt * ratio;
+                });
+              } else {
+                // 比例皆為 0 → 回退平分
+                const splitAmt = amt / (members.length || 1);
+                members.forEach(m => { balances[m] -= splitAmt; });
+              }
             } else {
-              // equal: 所有人平分
+              // equal: 所有成員平分
               const splitAmt = amt / (members.length || 1);
               members.forEach(m => { balances[m] -= splitAmt; });
             }
@@ -1148,6 +1481,33 @@
             return `${debtors[0].name} 需給 ${creditors[0].name} ${money(debtors[0].amount)}`;
           }
           return debtors.map(d => `${d.name} 需付 ${money(d.amount)}`).join('\n');
+        });
+
+        // #11: 結算明細（手動觸發顯示）
+        const settlementDetails = computed(() => {
+          const balances = settlementBalances.value;
+          let debtors = [];
+          let creditors = [];
+          for (let [name, bal] of Object.entries(balances)) {
+            if (bal < -1) debtors.push({ name, amount: -bal });
+            if (bal > 1) creditors.push({ name, amount: bal });
+          }
+          // 最少轉帳演算法：貪心法配對債務人與債權人
+          const transfers = [];
+          let di = 0, ci = 0;
+          debtors.sort((a, b) => b.amount - a.amount);
+          creditors.sort((a, b) => b.amount - a.amount);
+          while (di < debtors.length && ci < creditors.length) {
+            const transfer = Math.min(debtors[di].amount, creditors[ci].amount);
+            if (transfer > 1) {
+              transfers.push({ from: debtors[di].name, to: creditors[ci].name, amount: transfer });
+            }
+            debtors[di].amount -= transfer;
+            creditors[ci].amount -= transfer;
+            if (debtors[di].amount < 1) di++;
+            if (creditors[ci].amount < 1) ci++;
+          }
+          return transfers;
         });
 
         const showToast = msg => {
@@ -1193,87 +1553,138 @@
         function paymentLabel(p) { return { cash: '現金', credit: '信用卡', electronic: '電子票證' }[p] || p; }
 
         function openNavigation(plan, fromPlan) {
-          // 組合地點查詢字串：優先使用 location，補上 title 提升精確度
-          const destination = [plan.location, plan.title].filter(Boolean).join(' ') || plan.title || '';
-          const origin = fromPlan ? [fromPlan.location, fromPlan.title].filter(Boolean).join(' ') : '';
+          const destination = plan.locationKr || plan.location || plan.title || '';
+          const origin = fromPlan ? (fromPlan.locationKr || fromPlan.location || fromPlan.title || '') : '';
+          const allText = `${plan.location || ''} ${plan.locationKr || ''} ${plan.title || ''}`;
 
-          if (plan.transport === 'subway') {
-            // 韓巢地鐵：帶入目的地搜尋關鍵字
-            const subwayQuery = plan.title || plan.location || '';
-            if (subwayQuery) {
-              window.open(`https://map.hanchao.com/subway?search=${encodeURIComponent(subwayQuery)}`, '_blank', 'noopener');
+          // 桃園機場使用 Google Map，其他使用 Naver Map
+          const useTaoyuan = /桃園機場/.test(allText);
+          if (useTaoyuan) {
+            const query = plan.location || plan.title || '桃園國際機場';
+            window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`, '_blank', 'noopener');
+            return;
+          }
+
+          const modeMap = { walk: 'walk', taxi: 'car', subway: 'transit', flight: 'transit' };
+          const mode = modeMap[plan.transport] || 'transit';
+          const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+
+          if (origin && destination) {
+            if (isMobile) {
+              const naverAppUrl = `nmap://route/${mode}?slat=0&slng=0&sname=${encodeURIComponent(origin)}&dlat=0&dlng=0&dname=${encodeURIComponent(destination)}&appname=hamkke.travel`;
+              const fallbackTimer = setTimeout(() => {
+                window.open(`https://map.naver.com/v5/search/${encodeURIComponent(destination)}`, '_blank', 'noopener');
+              }, 1500);
+              window.location.href = naverAppUrl;
+              window.addEventListener('visibilitychange', function handler() {
+                clearTimeout(fallbackTimer);
+                window.removeEventListener('visibilitychange', handler);
+              }, { once: true });
             } else {
-              window.open('https://map.hanchao.com/subway', '_blank', 'noopener');
+              window.open(`https://map.naver.com/v5/search/${encodeURIComponent(destination)}`, '_blank', 'noopener');
             }
           } else {
-            // Naver Map：根據交通方式選擇導航模式
-            const modeMap = { walk: 'walk', taxi: 'car' };
-            const mode = modeMap[plan.transport] || 'transit';
-
-            if (origin && destination) {
-              // 有起點和終點 → 開啟 Naver Map 路線規劃（優先嘗試 App deep link）
-              const naverAppUrl = `nmap://route/${mode}?slat=0&slng=0&sname=${encodeURIComponent(origin)}&dlat=0&dlng=0&dname=${encodeURIComponent(destination)}&appname=hamkke.travel`;
-              const naverWebUrl = `https://map.naver.com/v5/directions/-/-/-/${mode === 'car' ? 'car' : mode === 'walk' ? 'walk' : 'transit'}?c=15,0,0,0,dh&destination=${encodeURIComponent(destination)}`;
-              
-              // 嘗試開啟 Naver Map App，失敗則 fallback 到網頁搜尋
-              const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
-              if (isMobile) {
-                const fallbackTimer = setTimeout(() => {
-                  window.open(`https://map.naver.com/v5/search/${encodeURIComponent(destination)}`, '_blank', 'noopener');
-                }, 1500);
-                window.location.href = naverAppUrl;
-                // App 開啟成功會離開頁面，清除 fallback
-                window.addEventListener('visibilitychange', function handler() {
-                  clearTimeout(fallbackTimer);
-                  window.removeEventListener('visibilitychange', handler);
-                }, { once: true });
-              } else {
+            if (isMobile) {
+              const naverAppUrl = `nmap://search?query=${encodeURIComponent(destination)}&appname=hamkke.travel`;
+              const fallbackTimer = setTimeout(() => {
                 window.open(`https://map.naver.com/v5/search/${encodeURIComponent(destination)}`, '_blank', 'noopener');
-              }
+              }, 1500);
+              window.location.href = naverAppUrl;
+              window.addEventListener('visibilitychange', function handler() {
+                clearTimeout(fallbackTimer);
+                window.removeEventListener('visibilitychange', handler);
+              }, { once: true });
             } else {
-              // 只有終點 → 搜尋該地點
-              const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
-              if (isMobile) {
-                const naverAppUrl = `nmap://search?query=${encodeURIComponent(destination)}&appname=hamkke.travel`;
-                const fallbackTimer = setTimeout(() => {
-                  window.open(`https://map.naver.com/v5/search/${encodeURIComponent(destination)}`, '_blank', 'noopener');
-                }, 1500);
-                window.location.href = naverAppUrl;
-                window.addEventListener('visibilitychange', function handler() {
-                  clearTimeout(fallbackTimer);
-                  window.removeEventListener('visibilitychange', handler);
-                }, { once: true });
-              } else {
-                window.open(`https://map.naver.com/v5/search/${encodeURIComponent(destination)}`, '_blank', 'noopener');
-              }
+              window.open(`https://map.naver.com/v5/search/${encodeURIComponent(destination)}`, '_blank', 'noopener');
             }
           }
         }
 
-        // 重構 moveSchedule 排序功能
+        // Drag & Drop 排序 (支援 touch + mouse)
+        const dragState = ref({ dragging: false, dragIndex: -1, overIndex: -1 });
+        let touchStartY = 0;
+        let touchElement = null;
+
+        function handleDragStart(index, e) {
+          dragState.value.dragging = true;
+          dragState.value.dragIndex = index;
+          if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', index);
+          }
+        }
+        function handleDragOver(index, e) {
+          dragState.value.overIndex = index;
+        }
+        function handleDragEnd() {
+          if (dragState.value.dragIndex !== -1 && dragState.value.overIndex !== -1 && dragState.value.dragIndex !== dragState.value.overIndex) {
+            reorderPlans(dragState.value.dragIndex, dragState.value.overIndex);
+          }
+          dragState.value = { dragging: false, dragIndex: -1, overIndex: -1 };
+        }
+
+        function handleTouchStart(index, e) {
+          const touch = e.touches[0];
+          touchStartY = touch.clientY;
+          touchElement = e.currentTarget;
+          dragState.value.dragging = true;
+          dragState.value.dragIndex = index;
+        }
+        function handleTouchMove(e) {
+          if (!dragState.value.dragging) return;
+          const touch = e.touches[0];
+          const elements = document.querySelectorAll('[draggable="true"]');
+          let closestIdx = -1;
+          let closestDist = Infinity;
+          elements.forEach((el, idx) => {
+            const rect = el.getBoundingClientRect();
+            const center = rect.top + rect.height / 2;
+            const dist = Math.abs(touch.clientY - center);
+            if (dist < closestDist) {
+              closestDist = dist;
+              closestIdx = idx;
+            }
+          });
+          dragState.value.overIndex = closestIdx;
+        }
+        function handleTouchEnd() {
+          if (dragState.value.dragIndex !== -1 && dragState.value.overIndex !== -1 && dragState.value.dragIndex !== dragState.value.overIndex) {
+            reorderPlans(dragState.value.dragIndex, dragState.value.overIndex);
+          }
+          dragState.value = { dragging: false, dragIndex: -1, overIndex: -1 };
+          touchElement = null;
+        }
+
+        function reorderPlans(fromIndex, toIndex) {
+          const items = [...selectedPlans.value];
+          const [moved] = items.splice(fromIndex, 1);
+          items.splice(toIndex, 0, moved);
+          // 重新寫入 order
+          items.forEach((item, idx) => {
+            const realIdx = plans.value.findIndex(p => p.id === item.id);
+            if (realIdx !== -1) plans.value[realIdx].order = idx;
+          });
+          saveLocal();
+          // 同步 reorder 到 Firestore
+          if (cloudTripId.value && window.HamkkeFirebase && window.HamkkeFirebase.isFirebaseReady()) {
+            items.forEach((item, idx) => {
+              window.HamkkeFirebase.savePlanDoc(cloudTripId.value, { ...item, order: idx });
+            });
+          }
+          nextTick(() => window.lucide && window.lucide.createIcons());
+        }
+
+        // 保留 moveSchedule 作為 fallback
         function moveSchedule(index, direction) {
           const items = selectedPlans.value;
           const targetIndex = index + direction;
           if (targetIndex < 0 || targetIndex >= items.length) return;
-          
-          const currentPlan = items[index];
-          const targetPlan = items[targetIndex];
-          
-          const currentRealIdx = plans.value.findIndex(p => p.id === currentPlan.id);
-          const targetRealIdx = plans.value.findIndex(p => p.id === targetPlan.id);
-
-          if (currentRealIdx !== -1 && targetRealIdx !== -1) {
-            const tempOrder = plans.value[currentRealIdx].order !== undefined ? plans.value[currentRealIdx].order : index;
-            plans.value[currentRealIdx].order = plans.value[targetRealIdx].order !== undefined ? plans.value[targetRealIdx].order : targetIndex;
-            plans.value[targetRealIdx].order = tempOrder;
-          }
-
-          saveLocal();
-          nextTick(() => window.lucide && window.lucide.createIcons());
+          reorderPlans(index, targetIndex);
         }
 
         function openPlanForm(plan = null) {
-          planForm.value = plan ? { ...plan } : { id: '', date: selectedDate.value, time: '10:00', title: '', location: '', category: '景點', transport: 'subway', url: '', note: '' };
+          planQuickMode.value = !plan; // 新增時預設快速模式
+          planForm.value = plan ? { ...plan } : { id: '', date: selectedDate.value, time: '10:00', title: '', location: '', locationKr: '', category: '景點', transport: 'subway', url: '', note: '' };
           modal.value = 'plan';
           lockScroll();
           nextTick(() => window.lucide && window.lucide.createIcons());
@@ -1283,25 +1694,65 @@
             const idx = plans.value.findIndex(p => p.id === planForm.value.id);
             if (idx >= 0) plans.value[idx] = { ...planForm.value };
           } else {
-            plans.value.push({ ...planForm.value, id: uid(), order: selectedPlans.value.length });
+            planForm.value.id = uid();
+            planForm.value.order = selectedPlans.value.length;
+            plans.value.push({ ...planForm.value });
+          }
+          // 同步到 Firestore
+          if (cloudTripId.value && window.HamkkeFirebase && window.HamkkeFirebase.isFirebaseReady()) {
+            window.HamkkeFirebase.savePlanDoc(cloudTripId.value, planForm.value);
           }
           closeModal();
           showToast('行程已儲存');
         }
         function deletePlan() {
-          plans.value = plans.value.filter(p => p.id !== planForm.value.id);
+          const planId = planForm.value.id;
+          plans.value = plans.value.filter(p => p.id !== planId);
+          // 同步刪除到 Firestore
+          if (cloudTripId.value && planId && window.HamkkeFirebase && window.HamkkeFirebase.isFirebaseReady()) {
+            window.HamkkeFirebase.deletePlanDoc(cloudTripId.value, planId);
+          }
           closeModal();
           showToast('行程已刪除');
         }
 
-        function openExpenseForm(expense = null) {
-          expenseForm.value = expense ? { ...expense } : { id: '', title: '', amount: null, currency: 'KRW', category: '美食', payment: 'cash', date: formatISO(new Date()), rate: CONFIG.DEFAULT_RATE_KRW_TWD, payers: [{name: trip.value.memberNames[0], amount: ''}], splitType: 'equal', splits: trip.value.memberNames.map(n=>({name:n, value:1})) };
+        function openExpenseForm(expense = null, forceQuickMode = null) {
+          // #9: 新增時預設快速模式；若外部指定則不覆蓋
+          if (forceQuickMode !== null) {
+            expenseQuickMode.value = forceQuickMode;
+          } else {
+            expenseQuickMode.value = !expense;
+          }
+          expenseForm.value = expense
+            ? { ...expense, payers: Array.isArray(expense.payers) && expense.payers.length ? expense.payers.map(p => ({...p})) : [{name: trip.value.memberNames[0], amount: ''}], splits: Array.isArray(expense.splits) && expense.splits.length ? expense.splits.map(s => ({...s})) : trip.value.memberNames.map(n=>({name:n, value:1})) }
+            : { id: '', title: '', amount: null, currency: detectedCurrency.value || 'KRW', category: '美食', payment: 'cash', date: formatISO(new Date()), rate: CONFIG.DEFAULT_RATE_KRW_TWD, payers: [{name: trip.value.memberNames[0], amount: ''}], splitType: 'equal', splits: trip.value.memberNames.map(n=>({name:n, value:1})) };
           modal.value = 'expense';
           lockScroll();
           nextTick(() => window.lucide && window.lucide.createIcons());
         }
+        // #7: 計算付款人剩餘金額提示
+        const payerRemainingHint = computed(() => {
+          const total = Number(expenseForm.value.amount) || 0;
+          const paid = (expenseForm.value.payers || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+          const remaining = total - paid;
+          if (total === 0) return '';
+          if (Math.abs(remaining) < 0.01) return '✓ 金額已分配完畢';
+          if (remaining > 0) return `尚餘 ${formatNumber(remaining)} 待分配`;
+          return `⚠️ 超出總金額 ${formatNumber(-remaining)}`;
+        });
         function saveExpense() {
           const clean = { ...expenseForm.value, amount: Number(expenseForm.value.amount) || 0, rate: Number(expenseForm.value.rate) || CONFIG.DEFAULT_RATE_KRW_TWD };
+          // #9: 速記模式下若未填標題，自動以分類+金額產生
+          if (!clean.title) {
+            clean.title = `${clean.category} ${currencySymbol(clean.currency)}${formatNumber(clean.amount)}`;
+          }
+          // #7: 若只有一位付款人且金額為空，自動填入總金額
+          if (Array.isArray(clean.payers)) {
+            const totalPaid = clean.payers.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+            if (totalPaid === 0 && clean.payers.length >= 1) {
+              clean.payers[0].amount = clean.amount;
+            }
+          }
           if (clean.id) {
             const idx = expenses.value.findIndex(e => e.id === clean.id);
             if (idx >= 0) expenses.value[idx] = clean;
@@ -1309,11 +1760,20 @@
             clean.id = uid();
             expenses.value.unshift(clean);
           }
+          // 同步到 Firestore
+          if (cloudTripId.value && window.HamkkeFirebase && window.HamkkeFirebase.isFirebaseReady()) {
+            window.HamkkeFirebase.saveExpenseDoc(cloudTripId.value, clean);
+          }
           closeModal();
           showToast('支出已儲存');
         }
         function deleteExpense() {
-          expenses.value = expenses.value.filter(e => e.id !== expenseForm.value.id);
+          const expId = expenseForm.value.id;
+          expenses.value = expenses.value.filter(e => e.id !== expId);
+          // 同步刪除到 Firestore
+          if (cloudTripId.value && expId && window.HamkkeFirebase && window.HamkkeFirebase.isFirebaseReady()) {
+            window.HamkkeFirebase.deleteExpenseDoc(cloudTripId.value, expId);
+          }
           closeModal();
           showToast('支出已刪除');
         }
@@ -1327,19 +1787,75 @@
         function saveTrip() {
           const names = (tripForm.value.memberNamesText || '').split(/[,，、]/).map(n => n.trim()).filter(Boolean);
           trip.value = { ...tripForm.value, memberNames: names.length ? names : ['我', '旅伴'] };
+          saveTripList();
           closeModal();
           showToast('旅程設定已更新');
         }
 
+        // #18: 資料備份 — 匯出/匯入 JSON
+        function exportBackup() {
+          const data = {
+            _schemaVersion: CONFIG.SCHEMA_VERSION,
+            _exportDate: new Date().toISOString(),
+            _appVersion: 'v0.2',
+            trip: trip.value,
+            plans: plans.value,
+            expenses: expenses.value
+          };
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `hamkke-backup-${formatISO(new Date())}.json`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          showToast('備份檔已下載');
+        }
+
+        function importBackup(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const data = JSON.parse(e.target.result);
+              // 驗證基本結構
+              if (!data.trip || !Array.isArray(data.plans) || !Array.isArray(data.expenses)) {
+                return showToast('備份檔格式不正確');
+              }
+              // 套用資料
+              trip.value = data.trip;
+              plans.value = data.plans;
+              expenses.value = data.expenses;
+              saveLocal();
+              closeModal();
+              showToast('資料已成功還原');
+            } catch (err) {
+              showToast('備份檔讀取失敗');
+            }
+          };
+          reader.readAsText(file);
+          // 重置 input 以便重複選取同檔案
+          event.target.value = '';
+        }
+
         // 安全碼相關功能
         function openSafeCode(type) {
+          safeInfoType.value = type;
           safeCodeError.value = false;
-          modal.value = 'safecode';
-          nextTick(() => {
-            window.lucide && window.lucide.createIcons();
-            // 自動 focus 第一個輸入框
-            if (safeCodeRefs.value[0]) safeCodeRefs.value[0].focus();
-          });
+          if (safeUnlocked.value) {
+            // 已解鎖，直接顯示資訊 dialog
+            modal.value = 'safeinfo';
+            nextTick(() => window.lucide && window.lucide.createIcons());
+          } else {
+            modal.value = 'safecode';
+            nextTick(() => {
+              window.lucide && window.lucide.createIcons();
+              if (safeCodeRefs.value[0]) safeCodeRefs.value[0].focus();
+            });
+          }
         }
 
         function handleSafeCodeInput(index, event) {
@@ -1367,8 +1883,8 @@
             safeUnlocked.value = true;
             safeContacts.value = decodeB64(ENCODED_CONTACTS);
             sessionStorage.setItem('safe_unlocked', 'true');
-            closeModal();
-            showToast('已解鎖安心資訊');
+            // 驗證成功後直接顯示資訊 dialog
+            modal.value = 'safeinfo';
             nextTick(() => window.lucide && window.lucide.createIcons());
           } else {
             safeCodeError.value = true;
@@ -1381,33 +1897,417 @@
           }
         }
 
-        // B09: 實作 Web Share API，fallback 複製 URL 到剪貼簿
-        function openShareModal() {
-          const shareData = {
-            title: trip.value.title || '首爾散步計畫',
-            text: `一起來看我的旅行計畫：${trip.value.title}`,
-            url: window.location.href
-          };
-          if (navigator.share) {
-            navigator.share(shareData).catch(() => {});
-          } else if (navigator.clipboard) {
-            navigator.clipboard.writeText(window.location.href).then(() => {
-              showToast('頁面連結已複製到剪貼簿');
-            }).catch(() => {
-              showToast('無法複製連結，請手動複製網址列');
-            });
-          } else {
-            showToast('此瀏覽器不支援分享功能');
+        // ===== Phase 5: 多旅程管理 =====
+        const TRIPS_KEY = 'hamkke-trips-v1';
+        const currentTripId = ref('');
+        const tripList = ref([]);
+        const importPreview = ref({});
+        const importFileInput = ref(null);
+        let pendingImportData = null;
+
+        // 城市 → 幣別對照
+        const CITY_CURRENCY_MAP = {
+          'seoul': 'KRW', 'busan': 'KRW', 'jeju': 'KRW',
+          'tokyo': 'JPY', 'osaka': 'JPY', 'kyoto': 'JPY', 'fukuoka': 'JPY',
+          'bangkok': 'THB', 'chiang mai': 'THB', 'phuket': 'THB',
+          'new york': 'USD', 'los angeles': 'USD', 'san francisco': 'USD',
+          'london': 'GBP', 'paris': 'EUR', 'rome': 'EUR', 'barcelona': 'EUR',
+          'singapore': 'SGD', 'hong kong': 'HKD', 'shanghai': 'CNY', 'beijing': 'CNY'
+        };
+
+        function initTripList() {
+          try {
+            const saved = JSON.parse(localStorage.getItem(TRIPS_KEY));
+            if (saved && Array.isArray(saved.list) && saved.currentId) {
+              tripList.value = saved.list;
+              currentTripId.value = saved.currentId;
+              return;
+            }
+          } catch (e) {}
+          // 首次使用：把當前資料作為第一筆旅程
+          const id = uid();
+          currentTripId.value = id;
+          tripList.value = [{
+            id,
+            title: trip.value.title,
+            city: trip.value.city,
+            startDate: trip.value.startDate,
+            endDate: trip.value.endDate,
+            storageKey: CONFIG.STORAGE_KEY
+          }];
+          saveTripList();
+        }
+
+        function saveTripList() {
+          // 更新當前旅程的 meta
+          const idx = tripList.value.findIndex(t => t.id === currentTripId.value);
+          if (idx >= 0) {
+            tripList.value[idx].title = trip.value.title;
+            tripList.value[idx].city = trip.value.city;
+            tripList.value[idx].startDate = trip.value.startDate;
+            tripList.value[idx].endDate = trip.value.endDate;
           }
+          localStorage.setItem(TRIPS_KEY, JSON.stringify({ currentId: currentTripId.value, list: tripList.value }));
+        }
+
+        function switchTrip(id) {
+          if (id === currentTripId.value) { closeModal(); return; }
+          // 先存當前旅程
+          saveLocal();
+          saveTripList();
+          // 載入目標旅程
+          const target = tripList.value.find(t => t.id === id);
+          if (!target) return;
+          currentTripId.value = id;
+          try {
+            const raw = JSON.parse(localStorage.getItem(target.storageKey));
+            const data = migrateData(raw) || defaultState;
+            trip.value = data.trip || defaultState.trip;
+            plans.value = Array.isArray(data.plans) ? data.plans : [];
+            expenses.value = Array.isArray(data.expenses) ? data.expenses : [];
+          } catch (e) {
+            trip.value = { ...defaultState.trip };
+            plans.value = [];
+            expenses.value = [];
+          }
+          saveTripList();
+          selectedDate.value = trip.value.startDate;
+          selectedDay.value = 0;
+          // 更新偵測幣別
+          const cityKey = (trip.value.city || '').toLowerCase().trim();
+          detectedCurrency.value = CITY_CURRENCY_MAP[cityKey] || '';
+          closeModal();
+          showToast(`已切換至「${trip.value.title}」`);
+          nextTick(() => window.lucide && window.lucide.createIcons());
+        }
+
+        function createNewTrip() {
+          saveLocal();
+          saveTripList();
+          const id = uid();
+          const key = `travel-journal-${id}`;
+          const newTrip = {
+            title: '新旅程',
+            city: 'City',
+            startDate: formatISO(new Date()),
+            endDate: formatISO(new Date(Date.now() + 4 * 86400000)),
+            budget: 30000,
+            memberNames: ['我', '旅伴'],
+            hotelSchedule: []
+          };
+          tripList.value.push({ id, title: newTrip.title, city: newTrip.city, startDate: newTrip.startDate, endDate: newTrip.endDate, storageKey: key });
+          // 存新旅程的資料
+          localStorage.setItem(key, JSON.stringify({ _schemaVersion: CONFIG.SCHEMA_VERSION, trip: newTrip, plans: [], expenses: [] }));
+          currentTripId.value = id;
+          trip.value = newTrip;
+          plans.value = [];
+          expenses.value = [];
+          selectedDate.value = newTrip.startDate;
+          selectedDay.value = 0;
+          saveTripList();
+          closeModal();
+          showToast('新旅程已建立');
+          // 直接打開設定讓使用者填寫
+          nextTick(() => { openTripSettings(); });
+        }
+
+        function deleteTrip(id) {
+          if (id === currentTripId.value) return;
+          const target = tripList.value.find(t => t.id === id);
+          if (target) localStorage.removeItem(target.storageKey);
+          tripList.value = tripList.value.filter(t => t.id !== id);
+          saveTripList();
+          showToast('旅程已刪除');
+        }
+
+        // ===== Phase 5: 分享功能 =====
+        function shareTripLink() {
+          try {
+            const data = JSON.stringify({ trip: trip.value, plans: plans.value, expenses: expenses.value });
+            const compressed = LZString.compressToEncodedURIComponent(data);
+            const url = window.location.origin + window.location.pathname + '#import=' + compressed;
+            
+            if (navigator.clipboard) {
+              navigator.clipboard.writeText(url).then(() => {
+                showToast('行程連結已複製！傳給旅伴即可匯入');
+                closeModal();
+              });
+            } else {
+              // fallback
+              const ta = document.createElement('textarea');
+              ta.value = url;
+              document.body.appendChild(ta);
+              ta.select();
+              document.execCommand('copy');
+              document.body.removeChild(ta);
+              showToast('行程連結已複製！');
+              closeModal();
+            }
+          } catch (e) {
+            showToast('產生連結失敗');
+          }
+        }
+
+        async function shareScreenshot() {
+          closeModal();
+          showToast('擷取畫面中…');
+          await nextTick();
+          try {
+            const el = document.querySelector('.app-shell');
+            // iOS Safari WebKit canvas 記憶體上限約 16MP，降低 scale 避免崩潰
+            const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+            const scale = isIOS ? 1 : 2;
+            const canvas = await html2canvas(el, {
+              useCORS: true,
+              scale,
+              backgroundColor: '#fbfcf9',
+              // iOS Safari 需要限制 canvas 尺寸
+              windowWidth: el.scrollWidth,
+              windowHeight: Math.min(el.scrollHeight, 4096),
+              logging: false
+            });
+            
+            const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+            if (!blob) { showToast('截圖失敗'); return; }
+            
+            const file = new File([blob], `${trip.value.title || 'trip'}.png`, { type: 'image/png' });
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+              await navigator.share({ files: [file], title: trip.value.title });
+            } else {
+              // fallback: 下載圖片
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url; a.download = file.name;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+              showToast('截圖已下載');
+            }
+          } catch (e) {
+            console.warn('Screenshot error:', e);
+            showToast('截圖失敗，請稍後再試');
+          }
+        }
+
+        function exportTripJSON() {
+          const data = JSON.stringify({ _schemaVersion: CONFIG.SCHEMA_VERSION, trip: trip.value, plans: plans.value, expenses: expenses.value }, null, 2);
+          const blob = new Blob([data], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${trip.value.title || 'hamkke-trip'}-backup.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+          closeModal();
+          showToast('備份已下載');
+        }
+
+        function triggerImportJSON() {
+          if (importFileInput.value) importFileInput.value.click();
+        }
+
+        function handleImportFile(e) {
+          const file = e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            try {
+              const data = JSON.parse(ev.target.result);
+              if (data.trip) {
+                pendingImportData = data;
+                importPreview.value = data.trip;
+                closeModal();
+                nextTick(() => { modal.value = 'importConfirm'; lockScroll(); nextTick(() => window.lucide && window.lucide.createIcons()); });
+              } else {
+                showToast('無效的旅程檔案');
+              }
+            } catch (err) {
+              showToast('檔案格式錯誤');
+            }
+          };
+          reader.readAsText(file);
+          e.target.value = '';
+        }
+
+        function confirmImport() {
+          if (!pendingImportData) return;
+          const data = migrateData(pendingImportData);
+          trip.value = data.trip;
+          plans.value = Array.isArray(data.plans) ? data.plans : [];
+          expenses.value = Array.isArray(data.expenses) ? data.expenses : [];
+          selectedDate.value = trip.value.startDate;
+          selectedDay.value = 0;
+          saveLocal();
+          saveTripList();
+          pendingImportData = null;
+          closeModal();
+          showToast('旅程已匯入');
+          nextTick(() => window.lucide && window.lucide.createIcons());
+        }
+
+        function cancelImport() {
+          pendingImportData = null;
+          closeModal();
+        }
+
+        // URL 匯入檢查 (頁面載入時)
+        function checkURLImport() {
+          const hash = window.location.hash;
+          if (!hash.startsWith('#import=')) return;
+          try {
+            const compressed = hash.slice('#import='.length);
+            const json = LZString.decompressFromEncodedURIComponent(compressed);
+            const data = JSON.parse(json);
+            if (data.trip) {
+              pendingImportData = data;
+              importPreview.value = data.trip;
+              modal.value = 'importConfirm';
+              lockScroll();
+              // 清除 hash 避免重複匯入
+              history.replaceState(null, '', window.location.pathname);
+            }
+          } catch (e) {
+            console.warn('URL import failed:', e);
+          }
+        }
+
+        // ===== Phase 5: 幣別動態化 =====
+        function autoCurrency() {
+          const city = (tripForm.value.city || '').toLowerCase().trim();
+          const match = CITY_CURRENCY_MAP[city];
+          if (match) {
+            detectedCurrency.value = match;
+            showToast(`已偵測到 ${city} → 預設幣別 ${match}`);
+          }
+        }
+
+        // 保留舊 openShareModal 作為 fallback（不再直接使用）
+        function openShareModal() {
+          modal.value = 'share';
+          lockScroll();
+          nextTick(() => window.lucide && window.lucide.createIcons());
         }
         function closeModal() { 
           modal.value = ''; 
           unlockScroll();
           nextTick(() => window.lucide && window.lucide.createIcons());
         }
-        function switchTab(value) { 
+        // === 項目 2：分頁捲動位置記憶 ===
+        const scrollMemory = {};
+        function saveScrollPosition() {
+          const main = document.querySelector('main');
+          if (main) scrollMemory[activeTab.value] = main.scrollTop;
+        }
+        function restoreScrollPosition() {
+          nextTick(() => {
+            const main = document.querySelector('main');
+            if (main) main.scrollTop = scrollMemory[activeTab.value] || 0;
+          });
+        }
+
+        function switchTab(value) {
+          saveScrollPosition();
           activeTab.value = value; 
+          restoreScrollPosition();
           nextTick(() => window.lucide && window.lucide.createIcons());
+        }
+
+        // === 項目 1 + 4 + 5：手勢滑動切換分頁（跟手動畫 + 觸覺回饋 + 衝突處理）===
+        const swipeState = { startX: 0, startY: 0, startTime: 0, ignore: false, tracking: false, dx: 0 };
+        const swipeOffset = ref(0);
+        const swipeSwiping = ref(false);
+
+        const swipeStyle = computed(() => {
+          if (!swipeSwiping.value) return {};
+          return {
+            transform: `translateX(${swipeOffset.value}px)`,
+            opacity: Math.max(0.4, 1 - Math.abs(swipeOffset.value) / 400),
+            transition: 'none',
+            willChange: 'transform, opacity'
+          };
+        });
+
+        // 判斷觸摸點是否在可橫向捲動的元素內（如日期列）
+        function isInsideHorizontalScroll(el) {
+          while (el && el !== document.body) {
+            const style = window.getComputedStyle(el);
+            const overflowX = style.overflowX;
+            if ((overflowX === 'auto' || overflowX === 'scroll') && el.scrollWidth > el.clientWidth) {
+              return true;
+            }
+            el = el.parentElement;
+          }
+          return false;
+        }
+
+        function handleSwipeStart(e) {
+          if (modal.value) return;
+          const touch = e.touches[0];
+          swipeState.startX = touch.clientX;
+          swipeState.startY = touch.clientY;
+          swipeState.startTime = Date.now();
+          swipeState.tracking = false;
+          swipeState.dx = 0;
+          // 如果起始點在橫向捲動區域內，放行給該元素
+          swipeState.ignore = isInsideHorizontalScroll(e.target);
+        }
+
+        function handleSwipeMove(e) {
+          if (modal.value || swipeState.ignore) return;
+          const touch = e.touches[0];
+          const dx = touch.clientX - swipeState.startX;
+          const dy = touch.clientY - swipeState.startY;
+          // 只在明確水平滑動時才跟手
+          if (!swipeState.tracking) {
+            if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return; // 還在死區
+            if (Math.abs(dy) > Math.abs(dx)) { swipeState.ignore = true; return; } // 垂直滾動
+            swipeState.tracking = true;
+          }
+          // 檢查邊界：不能超出頭尾 tab
+          const tabValues = tabs.map(t => t.value);
+          const currentIdx = tabValues.indexOf(activeTab.value);
+          if ((dx > 0 && currentIdx === 0) || (dx < 0 && currentIdx === tabValues.length - 1)) {
+            // 到邊界了，做阻尼效果
+            swipeOffset.value = dx * 0.2;
+          } else {
+            swipeOffset.value = dx * 0.6; // 跟手但加阻尼讓手感更扎實
+          }
+          swipeSwiping.value = true;
+          swipeState.dx = dx;
+        }
+
+        function handleSwipeEnd(e) {
+          if (modal.value || swipeState.ignore) {
+            resetSwipe();
+            return;
+          }
+          const dx = swipeState.dx;
+          const dt = Date.now() - swipeState.startTime;
+          // 判斷是否達到切換條件：位移 > 60px 或速度夠快
+          const velocity = Math.abs(dx) / dt;
+          const shouldSwitch = Math.abs(dx) > 60 || (Math.abs(dx) > 30 && velocity > 0.4);
+          
+          if (shouldSwitch && swipeState.tracking) {
+            const tabValues = tabs.map(t => t.value);
+            const currentIdx = tabValues.indexOf(activeTab.value);
+            if (dx < 0 && currentIdx < tabValues.length - 1) {
+              // 項目 4：觸覺回饋
+              if (navigator.vibrate) navigator.vibrate(8);
+              switchTab(tabValues[currentIdx + 1]);
+            } else if (dx > 0 && currentIdx > 0) {
+              if (navigator.vibrate) navigator.vibrate(8);
+              switchTab(tabValues[currentIdx - 1]);
+            }
+          }
+          resetSwipe();
+        }
+
+        function resetSwipe() {
+          swipeOffset.value = 0;
+          swipeSwiping.value = false;
+          swipeState.tracking = false;
+          swipeState.dx = 0;
         }
         
         function openModal(name) {
@@ -1416,15 +2316,65 @@
           nextTick(() => window.lucide && window.lucide.createIcons());
         }
 
-        // B10: 加入錯誤處理與使用者提示
+        // #14: iOS TTS 相容性修復 — 支援 iPhone Safari 語音朗讀
+        let cachedKoreanVoice = null;
+        let voicesReady = false;
+
+        function loadVoices() {
+          const voices = window.speechSynthesis.getVoices();
+          if (voices.length) {
+            voicesReady = true;
+            // 優先選擇 iOS 內建韓語語音，再回退至任何 ko 語音
+            cachedKoreanVoice = voices.find(v => v.lang === 'ko-KR' && v.localService) ||
+                                voices.find(v => v.lang.startsWith('ko')) || null;
+          }
+        }
+
+        if ('speechSynthesis' in window) {
+          loadVoices();
+          window.speechSynthesis.addEventListener('voiceschanged', loadVoices);
+        }
+
+        // iOS Safari 15s 暫停 bug workaround
+        let iosResumeTimer = null;
+
         function speakKorean(text) {
           if (!('speechSynthesis' in window)) return showToast('此裝置不支援語音功能');
           try {
+            // 取消任何進行中的語音 & 清除 iOS timer
             window.speechSynthesis.cancel();
+            if (iosResumeTimer) { clearInterval(iosResumeTimer); iosResumeTimer = null; }
+
+            // 若語音列表尚未載入，嘗試同步取得
+            if (!voicesReady) loadVoices();
+
             const u = new SpeechSynthesisUtterance(text);
-            u.lang = 'ko-KR'; u.rate = 0.85;
-            u.onerror = () => showToast('語音播放失敗，請確認裝置未靜音');
+            u.lang = 'ko-KR';
+            u.rate = 0.85;
+            if (cachedKoreanVoice) u.voice = cachedKoreanVoice;
+
+            u.onerror = (e) => {
+              if (iosResumeTimer) { clearInterval(iosResumeTimer); iosResumeTimer = null; }
+              if (e.error !== 'canceled') showToast('語音播放失敗，請確認裝置未靜音');
+            };
+            u.onend = () => {
+              if (iosResumeTimer) { clearInterval(iosResumeTimer); iosResumeTimer = null; }
+            };
+
             window.speechSynthesis.speak(u);
+
+            // iOS Safari bug: 超過 ~15s 會自動暫停，用 resume 定時喚醒
+            const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+            if (isIOS) {
+              iosResumeTimer = setInterval(() => {
+                if (!window.speechSynthesis.speaking) {
+                  clearInterval(iosResumeTimer); iosResumeTimer = null;
+                } else {
+                  window.speechSynthesis.pause();
+                  window.speechSynthesis.resume();
+                }
+              }, 10000);
+            }
           } catch (err) {
             showToast('語音播放失敗，請確認裝置未靜音');
           }
@@ -1470,7 +2420,7 @@
           // 首爾座標
           const lat = 37.5665;
           const lon = 126.978;
-          const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=Asia/Seoul&forecast_days=10`;
+          const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=Asia/Seoul&forecast_days=16`;
           
           try {
             const res = await fetch(url);
@@ -1483,12 +2433,19 @@
                 temp: Math.round(data.current.temperature_2m),
                 ...weatherCodeToInfo(data.current.weather_code)
               },
-              daily: data.daily.time.map((date, i) => ({
-                date,
-                maxTemp: Math.round(data.daily.temperature_2m_max[i]),
-                minTemp: Math.round(data.daily.temperature_2m_min[i]),
-                ...weatherCodeToInfo(data.daily.weather_code[i])
-              }))
+              daily: data.daily.time.map((date, i) => {
+                const maxT = data.daily.temperature_2m_max[i];
+                const minT = data.daily.temperature_2m_min[i];
+                const code = data.daily.weather_code[i];
+                // API 末日可能回傳 null，過濾掉不完整的資料
+                if (maxT == null || code == null) return null;
+                return {
+                  date,
+                  maxTemp: Math.round(maxT),
+                  minTemp: Math.round(minT),
+                  ...weatherCodeToInfo(code)
+                };
+              }).filter(Boolean)
             };
           } catch (err) {
             weather.value = { loading: false, current: null, daily: [] };
@@ -1532,28 +2489,90 @@
           return getWeatherForDate(formatISO(new Date()));
         });
 
+        // 今日住宿：根據 hotelSchedule 智能顯示當天入住的飯店
+        const todayHotel = computed(() => {
+          if (!safeContacts.value.hotels || !safeContacts.value.hotels.length) return null;
+          const todayIso = formatISO(new Date());
+          const schedule = trip.value.hotelSchedule || [];
+          
+          // 尋找今天落在哪個住宿區間
+          for (const entry of schedule) {
+            if (todayIso >= entry.startDate && todayIso <= entry.endDate) {
+              const idx = entry.hotelIndex;
+              if (idx >= 0 && idx < safeContacts.value.hotels.length) {
+                return safeContacts.value.hotels[idx];
+              }
+            }
+          }
+          // 沒配到 schedule 就回傳第一間作為 fallback
+          return safeContacts.value.hotels[0];
+        });
+
         onMounted(() => {
           const savedFont = localStorage.getItem("fontSize");
           if (savedFont) {
             fontSize.value = savedFont;
+            applyFontScale(savedFont);
           }
+          // 初始化偵測幣別
+          const cityKey = (trip.value.city || '').toLowerCase().trim();
+          detectedCurrency.value = CITY_CURRENCY_MAP[cityKey] || '';
           fetchWeather();
-          nextTick(() => window.lucide && window.lucide.createIcons());
+          initTripList();
+          nextTick(() => {
+            window.lucide && window.lucide.createIcons();
+            checkURLImport();
+          });
+
+          // #19: 註冊 Service Worker 離線快取
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js').catch(() => {});
+          }
+
+          // ===== Firebase 初始化 + 雲端同步 =====
+          (async () => {
+            const FB = window.HamkkeFirebase;
+            if (!FB) return;
+            const ready = await FB.init();
+            if (!ready) {
+              syncStatus.value = 'offline';
+              return;
+            }
+            // 檢查 URL 是否帶有 ?trip=XXX（旅伴分享連結）
+            const sharedTripId = FB.getTripIdFromUrl();
+            if (sharedTripId) {
+              await joinSharedTrip(sharedTripId);
+            } else if (cloudTripId.value) {
+              // 已有雲端旅程，直接啟動同步
+              startCloudSync(cloudTripId.value);
+            }
+          })();
         });
 
         return {
           trip, plans, expenses, activeTab, selectedDate, selectedDay, modal, toast, fontSize, fontOptions,
-          honorificMode, koreanFilter, expenseFilter, planForm, expenseForm, tripForm,
-          tabs, planCategories, expenseCategories, currencies, koreanCategories, koreanPhrases, hotels,
-          safeUnlocked, safeCodeError, safeCodeRefs, safeContacts,
+          honorificMode, koreanFilter, expenseFilter, planForm, expenseForm, tripForm, planQuickMode, expenseQuickMode,
+          tabs, planCategories, expenseCategories, currencies, koreanCategories, koreanPhrases,
+          safeUnlocked, safeCodeError, safeCodeRefs, safeContacts, safeInfoType, dragState,
           tripDays, selectedPlans, todayPlans, activeDay, selectedDayName, totalPlans, totalSpentTwd, budgetPercent,
-          filteredExpenses, filteredKoreanPhrases, settlementMessage,
-          weather, nextStop, selectedDateWeather, todayWeather, getWeatherForDate,
+          filteredExpenses, filteredKoreanPhrases, settlementMessage, settlementDetails, settlementBalances,
+          payerRemainingHint,
+          weather, nextStop, selectedDateWeather, todayWeather, todayHotel, getWeatherForDate,
           formatDateRange, shortDate, money, formatNumber, currencySymbol, categoryStyle,
           transportIcon, transportLabel, paymentLabel, openNavigation, moveSchedule, setFontSize, openModal,
           openPlanForm, savePlan, deletePlan, openExpenseForm, saveExpense, deleteExpense,
           openTripSettings, saveTrip, openShareModal, closeModal, switchTab, speakKorean, showToast,
-          openSafeCode, handleSafeCodeInput, handleSafeCodeDelete, verifySafeCode
+          exportBackup, importBackup,
+          openSafeCode, handleSafeCodeInput, handleSafeCodeDelete, verifySafeCode,
+          handleDragStart, handleDragOver, handleDragEnd, handleTouchStart, handleTouchMove, handleTouchEnd,
+          handleSwipeStart, handleSwipeMove, handleSwipeEnd, swipeStyle,
+          // Phase 5
+          tripList, currentTripId, importPreview, importFileInput,
+          switchTrip, createNewTrip, deleteTrip,
+          shareTripLink, shareScreenshot, exportTripJSON, triggerImportJSON, handleImportFile,
+          confirmImport, cancelImport, autoCurrency,
+          // Firebase Cloud Sync
+          cloudTripId, syncStatus, enableCloudSync, joinSharedTrip, shareCloudLink
         };
       }
     }).mount('#app');

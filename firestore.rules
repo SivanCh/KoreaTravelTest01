@@ -1,0 +1,38 @@
+// Firestore Security Rules for HAMKKE
+// 請複製此內容到 Firebase Console > Firestore > Rules
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 旅程主文件
+    match /trips/{tripId} {
+      // 任何已登入使用者可以讀取（需知道 tripId）
+      // 加入 trip 後才能寫入
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null
+        && request.auth.uid in resource.data.members;
+      allow delete: if request.auth != null
+        && request.auth.uid == resource.data.createdBy;
+
+      // 允許新使用者透過 arrayUnion 加入 members
+      // (joinCloudTrip 時需要寫入 members 欄位)
+      allow update: if request.auth != null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
+        && request.resource.data.members.hasAll(resource.data.members);
+
+      // Plans subcollection
+      match /plans/{planId} {
+        allow read, write: if request.auth != null
+          && request.auth.uid in get(/databases/$(database)/documents/trips/$(tripId)).data.members;
+      }
+
+      // Expenses subcollection
+      match /expenses/{expenseId} {
+        allow read, write: if request.auth != null
+          && request.auth.uid in get(/databases/$(database)/documents/trips/$(tripId)).data.members;
+      }
+    }
+  }
+}
